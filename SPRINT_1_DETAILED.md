@@ -11823,3 +11823,493 @@ describe('useApi hook', () => {
 - Epic 1.4: Landing Page (20 SP, 48 hours)
 
 ---
+
+## Epic 1.4: Landing Page (20 SP, 48 hours)
+
+**Epic Goal:** Build a conversion-optimized landing page that clearly communicates BTRMe's value proposition, showcases key features, and drives users to sign up.
+
+**Success Criteria:**
+- ✅ Hero section with clear value proposition and CTA
+- ✅ Features section highlighting key capabilities
+- ✅ Pricing comparison (link to dedicated page)
+- ✅ Social proof section (testimonials, stats)
+- ✅ Final CTA section
+- ✅ Responsive on all devices (mobile-first)
+- ✅ Optimized for SEO and performance
+- ✅ Accessibility (WCAG 2.1 AA compliant)
+
+**Dependencies:**
+- Requires: Epic 1.3 (UI components, layout components)
+- Blocks: Marketing campaigns, user acquisition
+
+---
+
+### Story 1.4.1: Hero Section (5 SP, 12 hours)
+
+**User Story:**
+As a **visitor**, I want to **immediately understand what BTRMe does and how it can help me** so that **I can quickly decide if the product is relevant to my needs**.
+
+**Acceptance Criteria (Gherkin):**
+
+```gherkin
+Feature: Hero Section
+
+  Scenario: Hero displays value proposition
+    Given I visit the landing page
+    When I view the hero section
+    Then I see a clear headline explaining BTRMe's core value
+    And I see a subheadline with supporting details
+    And I see a primary CTA button ("Get Started")
+    And I see a secondary CTA button ("Watch Demo")
+
+  Scenario: Hero is responsive
+    Given I am on the landing page
+    When I resize my browser to mobile width
+    Then The hero text remains readable
+    And The CTA buttons stack vertically
+    And The hero image/illustration adapts to mobile
+
+  Scenario: Hero animation
+    Given I load the landing page
+    When The page renders
+    Then The headline fades in smoothly
+    And The CTA buttons have hover animations
+```
+
+**Story Points:** 5 SP
+**Estimated Hours:** 12 hours
+**Priority:** Critical
+**Dependencies:** Epic 1.3 (Button, layout components)
+
+---
+
+#### **Task 1.4.1.1: Create Hero Component** (3 SP, 7 hours)
+
+**Description:** Build the hero section component with headline, subheadline, CTAs, and responsive layout.
+
+**Steps:**
+
+##### **Step 1: Create Hero Component**
+
+File: `apps/web/components/landing/hero.tsx`
+
+```typescript
+import Link from 'next/link'
+import { Button } from '@/components/ui/button'
+import { ArrowRight, Play } from 'lucide-react'
+
+export function Hero() {
+  return (
+    <section className="relative overflow-hidden bg-background">
+      {/* Background gradient */}
+      <div className="absolute inset-0 -z-10 bg-gradient-to-br from-primary/5 via-background to-secondary/5" />
+
+      <div className="container flex min-h-[calc(100vh-4rem)] flex-col items-center justify-center py-12 md:py-24">
+        <div className="mx-auto max-w-4xl text-center space-y-8">
+          {/* Badge */}
+          <div className="inline-flex items-center rounded-full border bg-muted px-3 py-1 text-sm animate-fade-in">
+            <span className="mr-2">🚀</span>
+            <span className="font-medium">Build apps faster than ever</span>
+          </div>
+
+          {/* Headline */}
+          <h1 className="text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl lg:text-7xl animate-slide-in-from-bottom">
+            Build Production-Ready Apps
+            <span className="block text-primary mt-2">
+              With AI, No Code Required
+            </span>
+          </h1>
+
+          {/* Subheadline */}
+          <p className="mx-auto max-w-2xl text-lg text-muted-foreground md:text-xl animate-slide-in-from-bottom animation-delay-100">
+            BTRMe transforms your ideas into fully functional web applications using AI.
+            Simply describe what you want to build, and watch your app come to life in minutes.
+          </p>
+
+          {/* CTAs */}
+          <div className="flex flex-col gap-4 sm:flex-row sm:justify-center animate-slide-in-from-bottom animation-delay-200">
+            <Button size="lg" asChild className="group">
+              <Link href="/signup">
+                Get Started Free
+                <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
+              </Link>
+            </Button>
+            <Button size="lg" variant="outline" asChild>
+              <Link href="#demo">
+                <Play className="mr-2 h-4 w-4" />
+                Watch Demo
+              </Link>
+            </Button>
+          </div>
+
+          {/* Social Proof */}
+          <div className="pt-8 flex flex-col items-center gap-4 text-sm text-muted-foreground animate-fade-in animation-delay-300">
+            <div className="flex items-center gap-2">
+              <div className="flex -space-x-2">
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <div
+                    key={i}
+                    className="h-8 w-8 rounded-full border-2 border-background bg-muted"
+                  />
+                ))}
+              </div>
+              <span>Join 10,000+ developers building with BTRMe</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Hero Image/Demo */}
+        <div className="mt-16 w-full max-w-5xl animate-fade-in animation-delay-400">
+          <div className="relative aspect-video rounded-lg border bg-muted shadow-2xl">
+            {/* Placeholder for demo video/screenshot */}
+            <div className="flex items-center justify-center h-full">
+              <p className="text-muted-foreground">Product Demo / Screenshot</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}
+```
+
+##### **Step 2: Add Animation Utilities to Tailwind**
+
+Update `apps/web/tailwind.config.ts` (already added in Story 1.3.1, verify these exist):
+
+```typescript
+// Add to animation section
+animation: {
+  'fade-in': 'fade-in 0.5s ease-out',
+  'slide-in-from-bottom': 'slide-in-from-bottom 0.6s ease-out',
+},
+// Add animation delay utilities
+extend: {
+  animationDelay: {
+    '100': '100ms',
+    '200': '200ms',
+    '300': '300ms',
+    '400': '400ms',
+  },
+}
+```
+
+Create custom utility classes in `apps/web/app/globals.css`:
+
+```css
+@layer utilities {
+  .animation-delay-100 {
+    animation-delay: 100ms;
+  }
+  .animation-delay-200 {
+    animation-delay: 200ms;
+  }
+  .animation-delay-300 {
+    animation-delay: 300ms;
+  }
+  .animation-delay-400 {
+    animation-delay: 400ms;
+  }
+}
+```
+
+##### **Step 3: Create Landing Page**
+
+File: `apps/web/app/page.tsx`
+
+```typescript
+import { Hero } from '@/components/landing/hero'
+import { MarketingFooter } from '@/components/marketing-footer'
+
+export default function LandingPage() {
+  return (
+    <>
+      <Hero />
+      {/* More sections will be added in subsequent stories */}
+      <MarketingFooter />
+    </>
+  )
+}
+```
+
+**Deliverables:**
+- ✅ `components/landing/hero.tsx` - Hero component
+- ✅ Updated `app/page.tsx` - Landing page
+- ✅ Animation utilities in Tailwind config
+- ✅ Responsive design (mobile-first)
+- ✅ Smooth animations and transitions
+
+**Testing:**
+- Manual: Test on different screen sizes
+- Lighthouse: Score 90+ for Performance, Accessibility, SEO
+- Visual regression: Verify animations work smoothly
+
+---
+
+#### **Task 1.4.1.2: Add SEO Metadata** (2 SP, 5 hours)
+
+**Description:** Optimize the landing page for search engines with proper metadata, structured data, and Open Graph tags.
+
+**Steps:**
+
+##### **Step 1: Update Metadata**
+
+Update `apps/web/app/page.tsx`:
+
+```typescript
+import type { Metadata } from 'next'
+import { Hero } from '@/components/landing/hero'
+
+export const metadata: Metadata = {
+  title: 'BTRMe - Build Apps with AI | No Code Required',
+  description:
+    'Transform your ideas into production-ready web applications using AI. Build apps faster with BTRMe - no coding required. Start for free.',
+  keywords: [
+    'no-code',
+    'AI app builder',
+    'web app generator',
+    'build apps with AI',
+    'no code platform',
+    'app development',
+  ],
+  authors: [{ name: 'BTRMe' }],
+  creator: 'BTRMe',
+  publisher: 'BTRMe',
+  formatDetection: {
+    email: false,
+    address: false,
+    telephone: false,
+  },
+  metadataBase: new URL('https://btrme.com'),
+  alternates: {
+    canonical: '/',
+  },
+  openGraph: {
+    type: 'website',
+    locale: 'en_US',
+    url: 'https://btrme.com',
+    title: 'BTRMe - Build Apps with AI',
+    description:
+      'Transform your ideas into production-ready web applications using AI.',
+    siteName: 'BTRMe',
+    images: [
+      {
+        url: '/og-image.png',
+        width: 1200,
+        height: 630,
+        alt: 'BTRMe - Build Apps with AI',
+      },
+    ],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'BTRMe - Build Apps with AI',
+    description:
+      'Transform your ideas into production-ready web applications using AI.',
+    images: ['/twitter-image.png'],
+    creator: '@btrme',
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      'max-video-preview': -1,
+      'max-image-preview': 'large',
+      'max-snippet': -1,
+    },
+  },
+}
+
+export default function LandingPage() {
+  return (
+    <>
+      <Hero />
+    </>
+  )
+}
+```
+
+##### **Step 2: Add JSON-LD Structured Data**
+
+File: `apps/web/components/landing/structured-data.tsx`
+
+```typescript
+export function StructuredData() {
+  const structuredData = {
+    '@context': 'https://schema.org',
+    '@type': 'SoftwareApplication',
+    name: 'BTRMe',
+    applicationCategory: 'DeveloperApplication',
+    operatingSystem: 'Web',
+    offers: {
+      '@type': 'AggregateOffer',
+      priceCurrency: 'USD',
+      lowPrice: '0',
+      highPrice: '79',
+      offers: [
+        {
+          '@type': 'Offer',
+          price: '0',
+          priceCurrency: 'USD',
+          name: 'Free',
+        },
+        {
+          '@type': 'Offer',
+          price: '24',
+          priceCurrency: 'USD',
+          name: 'Pro',
+        },
+        {
+          '@type': 'Offer',
+          price: '79',
+          priceCurrency: 'USD',
+          name: 'Team',
+        },
+      ],
+    },
+    aggregateRating: {
+      '@type': 'AggregateRating',
+      ratingValue: '4.8',
+      ratingCount: '127',
+    },
+    description:
+      'BTRMe is an AI-powered no-code platform that transforms your ideas into production-ready web applications.',
+  }
+
+  return (
+    <script
+      type="application/ld+json"
+      dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
+    />
+  )
+}
+```
+
+Update `apps/web/app/page.tsx`:
+
+```typescript
+import { StructuredData } from '@/components/landing/structured-data'
+
+export default function LandingPage() {
+  return (
+    <>
+      <StructuredData />
+      <Hero />
+    </>
+  )
+}
+```
+
+##### **Step 3: Create sitemap.xml**
+
+File: `apps/web/app/sitemap.ts`
+
+```typescript
+import { MetadataRoute } from 'next'
+
+export default function sitemap(): MetadataRoute.Sitemap {
+  const baseUrl = 'https://btrme.com'
+
+  return [
+    {
+      url: baseUrl,
+      lastModified: new Date(),
+      changeFrequency: 'daily',
+      priority: 1,
+    },
+    {
+      url: `${baseUrl}/features`,
+      lastModified: new Date(),
+      changeFrequency: 'weekly',
+      priority: 0.8,
+    },
+    {
+      url: `${baseUrl}/pricing`,
+      lastModified: new Date(),
+      changeFrequency: 'weekly',
+      priority: 0.9,
+    },
+    {
+      url: `${baseUrl}/templates`,
+      lastModified: new Date(),
+      changeFrequency: 'daily',
+      priority: 0.7,
+    },
+    {
+      url: `${baseUrl}/docs`,
+      lastModified: new Date(),
+      changeFrequency: 'weekly',
+      priority: 0.6,
+    },
+  ]
+}
+```
+
+##### **Step 4: Create robots.txt**
+
+File: `apps/web/app/robots.ts`
+
+```typescript
+import { MetadataRoute } from 'next'
+
+export default function robots(): MetadataRoute.Robots {
+  return {
+    rules: [
+      {
+        userAgent: '*',
+        allow: '/',
+        disallow: ['/api/', '/admin/'],
+      },
+    ],
+    sitemap: 'https://btrme.com/sitemap.xml',
+  }
+}
+```
+
+**Deliverables:**
+- ✅ Complete SEO metadata in page.tsx
+- ✅ Open Graph tags for social sharing
+- ✅ Twitter Card metadata
+- ✅ JSON-LD structured data
+- ✅ sitemap.xml
+- ✅ robots.txt
+
+**Testing:**
+- Use Google Rich Results Test
+- Use Twitter Card Validator
+- Use Facebook Sharing Debugger
+- Verify in Google Search Console
+
+---
+
+### **Story 1.4.1 Summary**
+
+**Completed Tasks:**
+1. ✅ Task 1.4.1.1: Create Hero Component (7 hours)
+2. ✅ Task 1.4.1.2: Add SEO Metadata (5 hours)
+
+**Total Time:** 12 hours
+**Story Points:** 5 SP
+
+**Files Created/Modified:**
+- `apps/web/components/landing/hero.tsx` - Hero section
+- `apps/web/components/landing/structured-data.tsx` - JSON-LD
+- `apps/web/app/page.tsx` - Landing page with metadata
+- `apps/web/app/sitemap.ts` - Sitemap
+- `apps/web/app/robots.ts` - Robots.txt
+- `apps/web/app/globals.css` - Animation utilities
+
+**Acceptance Criteria Met:**
+- ✅ Clear value proposition in hero
+- ✅ Primary and secondary CTAs
+- ✅ Responsive on all devices
+- ✅ Smooth animations
+- ✅ SEO optimized (metadata, structured data, sitemap)
+- ✅ Social sharing optimized (OG tags, Twitter cards)
+
+**Next Story:**
+→ Story 1.4.2: Features Section (5 SP, 12 hours)
+
+---

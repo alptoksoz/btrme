@@ -3964,3 +3964,31 @@ node -e "const db = require('./packages/db/dist'); console.log(Object.keys(db))"
 → Epic 1.2: Authentication & Authorization (21 SP, 48 hours)
 
 ---
+
+## Epic 1.2: Authentication & Authorization
+
+**Epic ID:** 1.2
+**Epic Owner:** BE1 (Senior Backend Engineer #1)
+**Total Story Points:** 21 SP
+**Total Duration:** 48 hours (6 days)
+**Sprint:** 1 (Day 3-8)
+**Dependencies:** Epic 1.1 (Database setup required)
+
+**Epic Goal:**
+Implement secure authentication system using NextAuth.js with email magic links and Google OAuth, along with authorization middleware and protected routes.
+
+**Success Criteria:**
+- ✅ Users can sign up with email (magic link)
+- ✅ Users can sign in with Google OAuth
+- ✅ Sessions are persisted in database
+- ✅ Protected routes redirect to sign-in
+- ✅ Authorization middleware enforces tier limits
+- ✅ Rate limiting prevents abuse
+- ✅ CSRF protection enabled
+
+**Stories:**
+1. Story 1.2.1: NextAuth.js Integration (8 SP, 18h)
+2. Story 1.2.2: Authentication UI (8 SP, 18h)
+3. Story 1.2.3: Authorization & Permissions (5 SP, 12h)
+
+---

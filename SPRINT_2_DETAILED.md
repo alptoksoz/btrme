@@ -7747,3 +7747,1907 @@ Overall: Low (< 5), Medium (5-7), High (7-9), Very High (9+)
 → Epic 2.3: Code Generation Pipeline (20 SP, 48 hours)
 
 ---
+## Epic 2.3: Code Generation Pipeline (20 SP, 48 hours)
+
+**Epic Goal:** Build a robust code generation pipeline that transforms AI-generated responses into structured, multi-file projects with proper organization and formatting.
+
+**Success Criteria:**
+- ✅ Parse AI responses into file structures
+- ✅ Generate multiple files from single prompt
+- ✅ Stream generation progress to frontend
+- ✅ Handle syntax errors and validation
+- ✅ Project scaffolding and organization
+- ✅ File system operations
+
+---
+
+### Story 2.3.1: Code Generation Engine (8 SP, 18 hours)
+
+**User Story:**
+As a **system**, I want to **parse AI responses and generate code files** so that **I can create complete projects from prompts**.
+
+**Acceptance Criteria (Gherkin):**
+
+```gherkin
+Feature: Code Generation
+
+  Scenario: Parse AI response into files
+    Given AI returns code blocks
+    When Parser processes the response
+    Then Files are extracted with paths
+    And Content is properly formatted
+
+  Scenario: Generate project structure
+    Given List of files to generate
+    When Generation starts
+    Then Directory structure is created
+    And Files are written to disk
+    And Proper permissions are set
+```
+
+**Story Points:** 8 SP
+**Estimated Hours:** 18 hours
+**Priority:** Critical
+**Dependencies:** Epic 2.2
+
+---
+
+#### Task 2.3.1.1: Build Code Parser (6 hours)
+
+**Step 1: Create Parser Types (1 hour)**
+
+`apps/web/lib/codegen/types.ts`:
+```typescript
+export interface ParsedFile {
+  path: string
+  content: string
+  language: string
+  type: FileType
+}
+
+export type FileType =
+  | 'component'
+  | 'page'
+  | 'api'
+  | 'lib'
+  | 'config'
+  | 'style'
+  | 'test'
+  | 'schema'
+  | 'other'
+
+export interface ProjectStructure {
+  name: string
+  files: ParsedFile[]
+  directories: string[]
+  dependencies: Record<string, string>
+  scripts: Record<string, string>
+  envVars: EnvVar[]
+}
+
+export interface EnvVar {
+  key: string
+  value: string
+  required: boolean
+  description: string
+}
+
+export interface GenerationResult {
+  projectId: string
+  structure: ProjectStructure
+  filesGenerated: number
+  totalSize: number
+  warnings: string[]
+  errors: string[]
+}
+```
+
+**Step 2: Create Markdown Parser (3 hours)**
+
+`apps/web/lib/codegen/parser.ts`:
+```typescript
+import type { ParsedFile, ProjectStructure } from './types'
+
+/**
+ * Parse AI response containing code blocks
+ */
+export function parseAIResponse(response: string): ProjectStructure {
+  const files: ParsedFile[] = []
+  const directories = new Set<string>()
+  let dependencies: Record<string, string> = {}
+  let scripts: Record<string, string> = {}
+  const envVars: any[] = []
+
+  // Extract file structure section
+  const structureMatch = response.match(/```[^\n]*\n([\s\S]*?)\n```/m)
+  if (structureMatch) {
+    const structure = structureMatch[1]
+    extractDirectories(structure, directories)
+  }
+
+  // Extract code blocks with file paths
+  const codeBlockRegex = /###?\s*`([^`]+)`\s*\n```(\w+)\n([\s\S]*?)\n```/g
+  let match
+
+  while ((match = codeBlockRegex.exec(response)) !== null) {
+    const [, filePath, language, content] = match
+
+    files.push({
+      path: filePath.trim(),
+      content: content.trim(),
+      language: language.toLowerCase(),
+      type: inferFileType(filePath),
+    })
+
+    // Extract directory from path
+    const dir = filePath.substring(0, filePath.lastIndexOf('/'))
+    if (dir) {
+      directories.add(dir)
+      // Add parent directories
+      const parts = dir.split('/')
+      for (let i = 1; i < parts.length; i++) {
+        directories.add(parts.slice(0, i + 1).join('/'))
+      }
+    }
+  }
+
+  // Extract package.json if present
+  const packageJsonFile = files.find((f) => f.path.endsWith('package.json'))
+  if (packageJsonFile) {
+    try {
+      const pkg = JSON.parse(packageJsonFile.content)
+      dependencies = pkg.dependencies || {}
+      scripts = pkg.scripts || {}
+    } catch (e) {
+      console.warn('Failed to parse package.json')
+    }
+  }
+
+  // Extract .env.example
+  const envFile = files.find((f) => f.path.endsWith('.env.example'))
+  if (envFile) {
+    const lines = envFile.content.split('\n')
+    for (const line of lines) {
+      if (line.startsWith('#')) continue
+      const [key, value] = line.split('=')
+      if (key) {
+        envVars.push({
+          key: key.trim(),
+          value: value?.trim() || '',
+          required: !value || value.includes('YOUR_'),
+          description: '',
+        })
+      }
+    }
+  }
+
+  return {
+    name: extractProjectName(response),
+    files,
+    directories: Array.from(directories).sort(),
+    dependencies,
+    scripts,
+    envVars,
+  }
+}
+
+/**
+ * Extract directories from structure
+ */
+function extractDirectories(structure: string, directories: Set<string>): void {
+  const lines = structure.split('\n')
+  const stack: string[] = []
+
+  for (const line of lines) {
+    if (!line.trim()) continue
+
+    const depth = (line.match(/^[│\s├└─]*/)?.[0].length || 0) / 4
+    const name = line.replace(/^[│\s├└─]*/, '').trim()
+
+    if (!name) continue
+
+    // Adjust stack to current depth
+    while (stack.length > depth) {
+      stack.pop()
+    }
+
+    if (name.endsWith('/')) {
+      const dirName = name.slice(0, -1)
+      stack.push(dirName)
+      directories.add(stack.join('/'))
+    }
+  }
+}
+
+/**
+ * Infer file type from path
+ */
+function inferFileType(path: string): ParsedFile['type'] {
+  if (path.includes('/components/')) return 'component'
+  if (path.includes('/pages/') || path.includes('/app/') && path.endsWith('page.tsx'))
+    return 'page'
+  if (path.includes('/api/')) return 'api'
+  if (path.includes('/lib/')) return 'lib'
+  if (path.endsWith('.config.') || path.endsWith('.config.ts')) return 'config'
+  if (path.endsWith('.css') || path.endsWith('.scss')) return 'style'
+  if (path.includes('.test.') || path.includes('.spec.')) return 'test'
+  if (path.includes('schema.prisma')) return 'schema'
+  return 'other'
+}
+
+/**
+ * Extract project name
+ */
+function extractProjectName(response: string): string {
+  // Try to find project name in response
+  const match = response.match(/##?\s*Project[:\s]+([^\n]+)/i)
+  if (match) return match[1].trim()
+
+  // Try package.json name
+  const pkgMatch = response.match(/"name":\s*"([^"]+)"/i)
+  if (pkgMatch) return pkgMatch[1]
+
+  return 'generated-project'
+}
+
+/**
+ * Alternative parser for different AI response formats
+ */
+export function parseAlternativeFormat(response: string): ProjectStructure {
+  const files: ParsedFile[] = []
+  const directories = new Set<string>()
+
+  // Format: File: path/to/file.ts
+  // ```language
+  // code
+  // ```
+  const altRegex = /(?:File|Path):\s*([^\n]+)\n```(\w+)?\n([\s\S]*?)\n```/g
+  let match
+
+  while ((match = altRegex.exec(response)) !== null) {
+    const [, filePath, language, content] = match
+
+    files.push({
+      path: filePath.trim(),
+      content: content.trim(),
+      language: language?.toLowerCase() || 'text',
+      type: inferFileType(filePath),
+    })
+
+    const dir = filePath.substring(0, filePath.lastIndexOf('/'))
+    if (dir) directories.add(dir)
+  }
+
+  return {
+    name: extractProjectName(response),
+    files,
+    directories: Array.from(directories),
+    dependencies: {},
+    scripts: {},
+    envVars: [],
+  }
+}
+
+/**
+ * Validate parsed structure
+ */
+export function validateStructure(structure: ProjectStructure): {
+  valid: boolean
+  errors: string[]
+  warnings: string[]
+} {
+  const errors: string[] = []
+  const warnings: string[] = []
+
+  // Must have files
+  if (structure.files.length === 0) {
+    errors.push('No files found in parsed response')
+  }
+
+  // Check for package.json in Node projects
+  const hasPackageJson = structure.files.some((f) => f.path.endsWith('package.json'))
+  const hasTsFiles = structure.files.some((f) => f.language === 'typescript')
+  if (hasTsFiles && !hasPackageJson) {
+    warnings.push('TypeScript project missing package.json')
+  }
+
+  // Check for duplicate file paths
+  const paths = structure.files.map((f) => f.path)
+  const duplicates = paths.filter((p, i) => paths.indexOf(p) !== i)
+  if (duplicates.length > 0) {
+    errors.push(`Duplicate file paths: ${duplicates.join(', ')}`)
+  }
+
+  // Check for required env vars without defaults
+  const requiredEnvVars = structure.envVars.filter((v) => v.required && !v.value)
+  if (requiredEnvVars.length > 0) {
+    warnings.push(`${requiredEnvVars.length} required environment variables need configuration`)
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+    warnings,
+  }
+}
+```
+
+**Step 3: Create File Generator (2 hours)**
+
+`apps/web/lib/codegen/generator.ts`:
+```typescript
+import { writeFile, mkdir } from 'fs/promises'
+import { join, dirname } from 'path'
+import type { ProjectStructure, GenerationResult, ParsedFile } from './types'
+
+/**
+ * Generate project files on disk
+ */
+export async function generateProject(
+  structure: ProjectStructure,
+  outputDir: string
+): Promise<GenerationResult> {
+  const projectPath = join(outputDir, structure.name)
+  const warnings: string[] = []
+  const errors: string[] = []
+  let totalSize = 0
+
+  try {
+    // Create base directory
+    await mkdir(projectPath, { recursive: true })
+
+    // Create all subdirectories
+    for (const dir of structure.directories) {
+      await mkdir(join(projectPath, dir), { recursive: true })
+    }
+
+    // Generate files
+    for (const file of structure.files) {
+      try {
+        const filePath = join(projectPath, file.path)
+        const fileDir = dirname(filePath)
+
+        // Ensure directory exists
+        await mkdir(fileDir, { recursive: true })
+
+        // Write file
+        await writeFile(filePath, file.content, 'utf-8')
+
+        totalSize += file.content.length
+      } catch (error) {
+        errors.push(`Failed to write ${file.path}: ${error.message}`)
+      }
+    }
+
+    // Generate README if not present
+    if (!structure.files.some((f) => f.path === 'README.md')) {
+      const readme = generateReadme(structure)
+      await writeFile(join(projectPath, 'README.md'), readme, 'utf-8')
+      warnings.push('Generated default README.md')
+    }
+
+    return {
+      projectId: structure.name,
+      structure,
+      filesGenerated: structure.files.length,
+      totalSize,
+      warnings,
+      errors,
+    }
+  } catch (error) {
+    errors.push(`Project generation failed: ${error.message}`)
+    return {
+      projectId: structure.name,
+      structure,
+      filesGenerated: 0,
+      totalSize: 0,
+      warnings,
+      errors,
+    }
+  }
+}
+
+/**
+ * Generate default README
+ */
+function generateReadme(structure: ProjectStructure): string {
+  return `# ${structure.name}
+
+## Setup
+
+\`\`\`bash
+# Install dependencies
+npm install
+
+# Set up environment variables
+cp .env.example .env
+# Edit .env with your values
+\`\`\`
+
+## Development
+
+\`\`\`bash
+${Object.keys(structure.scripts).map((name) => `# ${name}\nnpm run ${name}`).join('\n\n')}
+\`\`\`
+
+## Environment Variables
+
+${structure.envVars.map((v) => `- \`${v.key}\`: ${v.description || 'Required'}`).join('\n')}
+
+## Project Structure
+
+\`\`\`
+${generateTreeView(structure)}
+\`\`\`
+
+---
+
+Generated by BTRMe
+`
+}
+
+/**
+ * Generate tree view of project
+ */
+function generateTreeView(structure: ProjectStructure): string {
+  const tree: string[] = []
+  const dirs = new Set(structure.directories)
+  const files = structure.files.map((f) => f.path).sort()
+
+  // Build tree
+  for (const file of files) {
+    const parts = file.split('/')
+    const depth = parts.length - 1
+    const indent = '  '.repeat(depth)
+    tree.push(`${indent}${parts[parts.length - 1]}`)
+  }
+
+  return tree.join('\n')
+}
+
+/**
+ * Generate in-memory (for preview)
+ */
+export function generateInMemory(structure: ProjectStructure): Map<string, string> {
+  const files = new Map<string, string>()
+
+  for (const file of structure.files) {
+    files.set(file.path, file.content)
+  }
+
+  return files
+}
+```
+
+**Deliverables:**
+- ✅ `lib/codegen/types.ts` - Type definitions
+- ✅ `lib/codegen/parser.ts` - AI response parser
+- ✅ `lib/codegen/generator.ts` - File generator
+- ✅ Multiple format support
+- ✅ Validation logic
+- ✅ Directory creation
+- ✅ README generation
+
+---
+
+#### Task 2.3.1.2: Create Generation API (6 hours)
+
+**Step 1: Database Schema (1 hour)**
+
+Update `prisma/schema.prisma`:
+```prisma
+model Generation {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  projectId   String?
+  project     Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  prompt      String   @db.Text
+  aiResponse  String   @db.Text
+
+  status      GenerationStatus @default(PENDING)
+
+  structure   Json?
+
+  filesCount  Int      @default(0)
+  totalSize   Int      @default(0)
+
+  warnings    String[]
+  errors      String[]
+
+  aiUsageId   String?
+  aiUsage     AiUsage[]
+
+  @@index([userId, createdAt])
+  @@index([status])
+  @@map("generations")
+}
+
+enum GenerationStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model Project {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name        String
+  description String?
+
+  structure   Json
+
+  generations Generation[]
+  aiUsage     AiUsage[]
+  costAlerts  CostAlert[]
+
+  status      ProjectStatus @default(DRAFT)
+
+  deploymentUrl String?
+  repositoryUrl String?
+
+  @@index([userId, createdAt])
+  @@map("projects")
+}
+
+enum ProjectStatus {
+  DRAFT
+  GENERATING
+  GENERATED
+  DEPLOYED
+  ARCHIVED
+}
+```
+
+**Step 2: Generation Service (3 hours)**
+
+`apps/web/lib/codegen/service.ts`:
+```typescript
+import { prisma } from '@/lib/db'
+import { generateCompletion } from '@/lib/ai/service'
+import { promptEngine } from '@/lib/prompts/engine'
+import { parseAIResponse, validateStructure } from './parser'
+import { generateProject } from './generator'
+import type { TemplateContext } from '@/lib/prompts/types'
+
+export interface GenerateOptions {
+  userId: string
+  templateId: string
+  context: TemplateContext
+  outputDir?: string
+  saveToDb?: boolean
+}
+
+/**
+ * Complete code generation flow
+ */
+export async function generateCode(options: GenerateOptions) {
+  const { userId, templateId, context, outputDir, saveToDb = true } = options
+
+  // 1. Compile template to prompt
+  const compiled = promptEngine.compile(templateId, context)
+
+  // 2. Create generation record
+  const generation = saveToDb
+    ? await prisma.generation.create({
+        data: {
+          userId,
+          prompt: compiled.content,
+          status: 'PROCESSING',
+          aiResponse: '',
+        },
+      })
+    : null
+
+  try {
+    // 3. Send to AI
+    const aiResult = await generateCompletion(
+      [
+        {
+          role: 'system',
+          content: compiled.sections.system,
+        },
+        {
+          role: 'user',
+          content: compiled.content,
+        },
+      ],
+      {
+        temperature: 0.3,
+        maxTokens: 8000,
+      }
+    )
+
+    // 4. Parse AI response
+    const structure = parseAIResponse(aiResult.content)
+
+    // 5. Validate structure
+    const validation = validateStructure(structure)
+    if (!validation.valid) {
+      throw new Error(`Invalid structure: ${validation.errors.join(', ')}`)
+    }
+
+    // 6. Generate files
+    let result
+    if (outputDir) {
+      result = await generateProject(structure, outputDir)
+    } else {
+      result = {
+        projectId: structure.name,
+        structure,
+        filesGenerated: structure.files.length,
+        totalSize: structure.files.reduce((sum, f) => sum + f.content.length, 0),
+        warnings: validation.warnings,
+        errors: [],
+      }
+    }
+
+    // 7. Update generation record
+    if (generation && saveToDb) {
+      await prisma.generation.update({
+        where: { id: generation.id },
+        data: {
+          status: 'COMPLETED',
+          aiResponse: aiResult.content,
+          structure: structure as any,
+          filesCount: result.filesGenerated,
+          totalSize: result.totalSize,
+          warnings: [...validation.warnings, ...result.warnings],
+          errors: result.errors,
+        },
+      })
+
+      // Create project record
+      await prisma.project.create({
+        data: {
+          userId,
+          name: structure.name,
+          description: context.userInput.description,
+          structure: structure as any,
+          status: 'GENERATED',
+        },
+      })
+    }
+
+    return {
+      generationId: generation?.id,
+      result,
+      aiUsage: {
+        tokens: aiResult.usage.totalTokens,
+        cost: aiResult.cost,
+      },
+    }
+  } catch (error) {
+    // Update generation as failed
+    if (generation && saveToDb) {
+      await prisma.generation.update({
+        where: { id: generation.id },
+        data: {
+          status: 'FAILED',
+          errors: [error.message],
+        },
+      })
+    }
+
+    throw error
+  }
+}
+
+/**
+ * Get generation by ID
+ */
+export async function getGeneration(generationId: string) {
+  return prisma.generation.findUnique({
+    where: { id: generationId },
+    include: {
+      user: {
+        select: {
+          id: true,
+          email: true,
+          name: true,
+        },
+      },
+      project: true,
+    },
+  })
+}
+
+/**
+ * List user generations
+ */
+export async function listGenerations(userId: string, limit = 20) {
+  return prisma.generation.findMany({
+    where: { userId },
+    orderBy: { createdAt: 'desc' },
+    take: limit,
+    include: {
+      project: {
+        select: {
+          id: true,
+          name: true,
+          status: true,
+        },
+      },
+    },
+  })
+}
+```
+
+**Step 3: API Routes (2 hours)**
+
+`apps/web/app/api/generate/route.ts`:
+```typescript
+import { apiHandler } from '@/lib/api/handler'
+import { z } from 'zod'
+import { generateCode } from '@/lib/codegen/service'
+
+const generateSchema = z.object({
+  templateId: z.string(),
+  context: z.object({
+    variables: z.record(z.unknown()),
+    techStack: z.any(),
+    userInput: z.object({
+      description: z.string(),
+      features: z.array(z.string()),
+      preferences: z.record(z.unknown()).optional(),
+    }),
+  }),
+})
+
+export const POST = apiHandler(
+  async (req, { body, userId }) => {
+    const result = await generateCode({
+      userId: userId!,
+      templateId: body!.templateId,
+      context: body!.context,
+      saveToDb: true,
+    })
+
+    return {
+      generationId: result.generationId,
+      filesGenerated: result.result.filesGenerated,
+      totalSize: result.result.totalSize,
+      warnings: result.result.warnings,
+      aiUsage: result.aiUsage,
+    }
+  },
+  {
+    requireAuth: true,
+    bodySchema: generateSchema,
+    rateLimit: 'generation',
+  }
+)
+```
+
+`apps/web/app/api/generate/[id]/route.ts`:
+```typescript
+import { apiHandler } from '@/lib/api/handler'
+import { getGeneration } from '@/lib/codegen/service'
+
+export const GET = apiHandler(
+  async (req, { params, userId }) => {
+    const generation = await getGeneration(params.id)
+
+    if (!generation) {
+      throw new Error('Generation not found')
+    }
+
+    if (generation.userId !== userId) {
+      throw new Error('Unauthorized')
+    }
+
+    return { generation }
+  },
+  {
+    requireAuth: true,
+  }
+)
+```
+
+`apps/web/app/api/generate/list/route.ts`:
+```typescript
+import { apiHandler } from '@/lib/api/handler'
+import { listGenerations } from '@/lib/codegen/service'
+
+export const GET = apiHandler(
+  async (req, { userId }) => {
+    const generations = await listGenerations(userId!)
+
+    return { generations }
+  },
+  {
+    requireAuth: true,
+  }
+)
+```
+
+**Deliverables:**
+- ✅ Prisma schema updates (Generation, Project models)
+- ✅ `lib/codegen/service.ts` - Generation orchestration
+- ✅ `app/api/generate/route.ts` - Generate API
+- ✅ `app/api/generate/[id]/route.ts` - Get generation
+- ✅ `app/api/generate/list/route.ts` - List generations
+- ✅ Database persistence
+- ✅ Error handling
+
+---
+
+#### Task 2.3.1.3: Testing (6 hours)
+
+**Step 1: Parser Tests (3 hours)**
+
+`apps/web/__tests__/codegen/parser.test.ts`:
+```typescript
+import { describe, test, expect } from 'vitest'
+import { parseAIResponse, validateStructure } from '@/lib/codegen/parser'
+
+describe('Code Parser', () => {
+  test('should parse basic file structure', () => {
+    const response = `
+### \`src/app/page.tsx\`
+\`\`\`typescript
+export default function Home() {
+  return <div>Hello</div>
+}
+\`\`\`
+
+### \`src/lib/utils.ts\`
+\`\`\`typescript
+export function add(a: number, b: number) {
+  return a + b
+}
+\`\`\`
+`
+
+    const structure = parseAIResponse(response)
+
+    expect(structure.files).toHaveLength(2)
+    expect(structure.files[0].path).toBe('src/app/page.tsx')
+    expect(structure.files[0].language).toBe('typescript')
+    expect(structure.files[0].content).toContain('Hello')
+  })
+
+  test('should extract package.json dependencies', () => {
+    const response = `
+### \`package.json\`
+\`\`\`json
+{
+  "name": "test-app",
+  "dependencies": {
+    "next": "14.0.0",
+    "react": "18.2.0"
+  }
+}
+\`\`\`
+`
+
+    const structure = parseAIResponse(response)
+
+    expect(structure.dependencies).toHaveProperty('next')
+    expect(structure.dependencies.next).toBe('14.0.0')
+  })
+
+  test('should validate structure correctly', () => {
+    const structure = {
+      name: 'test',
+      files: [
+        { path: 'test.ts', content: 'test', language: 'typescript', type: 'lib' as const },
+      ],
+      directories: [],
+      dependencies: {},
+      scripts: {},
+      envVars: [],
+    }
+
+    const result = validateStructure(structure)
+
+    expect(result.valid).toBe(true)
+    expect(result.errors).toHaveLength(0)
+  })
+
+  test('should detect duplicate files', () => {
+    const structure = {
+      name: 'test',
+      files: [
+        { path: 'test.ts', content: 'test', language: 'typescript', type: 'lib' as const },
+        { path: 'test.ts', content: 'test2', language: 'typescript', type: 'lib' as const },
+      ],
+      directories: [],
+      dependencies: {},
+      scripts: {},
+      envVars: [],
+    }
+
+    const result = validateStructure(structure)
+
+    expect(result.valid).toBe(false)
+    expect(result.errors.some((e) => e.includes('Duplicate'))).toBe(true)
+  })
+})
+```
+
+**Step 2: Generator Tests (2 hours)**
+
+`apps/web/__tests__/codegen/generator.test.ts`:
+```typescript
+import { describe, test, expect } from 'vitest'
+import { generateInMemory } from '@/lib/codegen/generator'
+
+describe('Code Generator', () => {
+  test('should generate files in memory', () => {
+    const structure = {
+      name: 'test-project',
+      files: [
+        {
+          path: 'src/index.ts',
+          content: 'console.log("hello")',
+          language: 'typescript',
+          type: 'lib' as const,
+        },
+        {
+          path: 'package.json',
+          content: '{"name": "test"}',
+          language: 'json',
+          type: 'config' as const,
+        },
+      ],
+      directories: ['src'],
+      dependencies: {},
+      scripts: {},
+      envVars: [],
+    }
+
+    const files = generateInMemory(structure)
+
+    expect(files.size).toBe(2)
+    expect(files.get('src/index.ts')).toContain('hello')
+    expect(files.get('package.json')).toContain('test')
+  })
+})
+```
+
+**Step 3: Integration Tests (1 hour)**
+
+`apps/web/__tests__/codegen/service.test.ts`:
+```typescript
+import { describe, test, expect, vi } from 'vitest'
+import { generateCode } from '@/lib/codegen/service'
+
+vi.mock('@/lib/ai/service', () => ({
+  generateCompletion: vi.fn().mockResolvedValue({
+    content: `
+### \`app/page.tsx\`
+\`\`\`typescript
+export default function Home() {
+  return <div>Test</div>
+}
+\`\`\`
+`,
+    usage: { totalTokens: 100, inputTokens: 50, outputTokens: 50 },
+    cost: 0.01,
+    provider: 'openai',
+    model: 'gpt-4',
+  }),
+}))
+
+describe('Generation Service', () => {
+  test('should generate code successfully', async () => {
+    const result = await generateCode({
+      userId: 'test-user',
+      templateId: 'web-app',
+      context: {
+        variables: { appName: 'TestApp' },
+        techStack: {},
+        userInput: {
+          description: 'Test app',
+          features: ['test'],
+        },
+      },
+      saveToDb: false,
+    })
+
+    expect(result.result.filesGenerated).toBeGreaterThan(0)
+  })
+})
+```
+
+**Deliverables:**
+- ✅ Parser unit tests
+- ✅ Generator tests
+- ✅ Service integration tests
+- ✅ Edge case coverage
+
+---
+
+### **Story 2.3.1 Summary**
+
+**Completed Tasks:**
+1. ✅ Task 2.3.1.1: Build Code Parser (6 hours)
+2. ✅ Task 2.3.1.2: Create Generation API (6 hours)
+3. ✅ Task 2.3.1.3: Testing (6 hours)
+
+**Total Time:** 18 hours
+**Story Points:** 8 SP
+
+**Files Created:**
+- `lib/codegen/types.ts`
+- `lib/codegen/parser.ts`
+- `lib/codegen/generator.ts`
+- `lib/codegen/service.ts`
+- Updated `prisma/schema.prisma`
+- `app/api/generate/route.ts`
+- `app/api/generate/[id]/route.ts`
+- `app/api/generate/list/route.ts`
+- Test files
+
+---
+
+### Story 2.3.2: Multi-file Generation & Streaming (7 SP, 16 hours)
+
+**User Story:**
+As a **user**, I want to **see real-time progress during generation** so that **I know the system is working**.
+
+**Acceptance Criteria:**
+
+```gherkin
+Feature: Streaming Generation
+
+  Scenario: Stream file generation progress
+    Given Generation starts
+    When Files are being created
+    Then Progress updates are streamed
+    And User sees each file as it's generated
+```
+
+**Story Points:** 7 SP
+**Estimated Hours:** 16 hours
+
+---
+
+#### Task 2.3.2.1: Implement Streaming (8 hours)
+
+**Step 1: Streaming Service (4 hours)**
+
+`apps/web/lib/codegen/streaming.ts`:
+```typescript
+import { generateCompletionStream } from '@/lib/ai/service'
+import { parseAIResponse } from './parser'
+
+export interface StreamEvent {
+  type: 'start' | 'chunk' | 'file' | 'complete' | 'error'
+  data: any
+}
+
+/**
+ * Generate code with streaming
+ */
+export async function* generateCodeStream(
+  prompt: string
+): AsyncGenerator<StreamEvent, void, undefined> {
+  yield { type: 'start', data: { message: 'Starting generation...' } }
+
+  let fullResponse = ''
+  let fileCount = 0
+
+  try {
+    const stream = generateCompletionStream(
+      [
+        {
+          role: 'system',
+          content: 'You are an expert code generator.',
+        },
+        { role: 'user', content: prompt },
+      ],
+      { temperature: 0.3, maxTokens: 8000 }
+    )
+
+    for await (const chunk of stream) {
+      fullResponse += chunk
+      yield { type: 'chunk', data: { content: chunk } }
+
+      // Try to parse and detect new files
+      const files = extractFilesFromPartial(fullResponse)
+      if (files.length > fileCount) {
+        const newFile = files[files.length - 1]
+        fileCount = files.length
+        yield { type: 'file', data: { file: newFile, count: fileCount } }
+      }
+    }
+
+    // Final parse
+    const structure = parseAIResponse(fullResponse)
+
+    yield {
+      type: 'complete',
+      data: {
+        structure,
+        filesGenerated: structure.files.length,
+        totalSize: structure.files.reduce((sum, f) => sum + f.content.length, 0),
+      },
+    }
+  } catch (error) {
+    yield {
+      type: 'error',
+      data: { error: error.message },
+    }
+  }
+}
+
+/**
+ * Extract files from partial response
+ */
+function extractFilesFromPartial(partial: string) {
+  const files: any[] = []
+  const regex = /###?\s*`([^`]+)`\s*\n```(\w+)\n([\s\S]*?)```/g
+  let match
+
+  while ((match = regex.exec(partial)) !== null) {
+    files.push({
+      path: match[1].trim(),
+      language: match[2],
+      content: match[3].trim(),
+    })
+  }
+
+  return files
+}
+```
+
+**Step 2: Streaming API Route (2 hours)**
+
+`apps/web/app/api/generate/stream/route.ts`:
+```typescript
+import { NextRequest } from 'next/server'
+import { getSession } from '@/lib/auth'
+import { generateCodeStream } from '@/lib/codegen/streaming'
+import { checkRateLimit } from '@/lib/api/rate-limit'
+
+export async function POST(req: NextRequest) {
+  const session = await getSession()
+  if (!session) {
+    return new Response('Unauthorized', { status: 401 })
+  }
+
+  await checkRateLimit({
+    identifier: session.user.id,
+    tier: session.user.tier,
+    type: 'generation',
+  })
+
+  const { prompt } = await req.json()
+
+  const encoder = new TextEncoder()
+  const stream = new ReadableStream({
+    async start(controller) {
+      try {
+        for await (const event of generateCodeStream(prompt)) {
+          const data = `data: ${JSON.stringify(event)}\n\n`
+          controller.enqueue(encoder.encode(data))
+        }
+        controller.close()
+      } catch (error) {
+        controller.error(error)
+      }
+    },
+  })
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+    },
+  })
+}
+```
+
+**Step 3: Frontend Hook (2 hours)**
+
+`apps/web/hooks/use-code-generation.ts`:
+```typescript
+'use client'
+
+import { useState, useCallback } from 'react'
+
+export interface GenerationProgress {
+  status: 'idle' | 'generating' | 'complete' | 'error'
+  currentFile?: string
+  filesGenerated: number
+  content: string
+  error?: string
+}
+
+export function useCodeGeneration() {
+  const [progress, setProgress] = useState<GenerationProgress>({
+    status: 'idle',
+    filesGenerated: 0,
+    content: '',
+  })
+
+  const generate = useCallback(async (prompt: string) => {
+    setProgress({
+      status: 'generating',
+      filesGenerated: 0,
+      content: '',
+    })
+
+    try {
+      const response = await fetch('/api/generate/stream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt }),
+      })
+
+      const reader = response.body?.getReader()
+      if (!reader) throw new Error('No reader')
+
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n\n')
+        buffer = lines.pop() || ''
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const event = JSON.parse(line.slice(6))
+
+            switch (event.type) {
+              case 'chunk':
+                setProgress((p) => ({
+                  ...p,
+                  content: p.content + event.data.content,
+                }))
+                break
+
+              case 'file':
+                setProgress((p) => ({
+                  ...p,
+                  currentFile: event.data.file.path,
+                  filesGenerated: event.data.count,
+                }))
+                break
+
+              case 'complete':
+                setProgress({
+                  status: 'complete',
+                  filesGenerated: event.data.filesGenerated,
+                  content: event.data.structure,
+                })
+                break
+
+              case 'error':
+                setProgress({
+                  status: 'error',
+                  filesGenerated: 0,
+                  content: '',
+                  error: event.data.error,
+                })
+                break
+            }
+          }
+        }
+      }
+    } catch (error) {
+      setProgress({
+        status: 'error',
+        filesGenerated: 0,
+        content: '',
+        error: error.message,
+      })
+    }
+  }, [])
+
+  return { progress, generate }
+}
+```
+
+**Deliverables:**
+- ✅ Streaming generation service
+- ✅ SSE API route
+- ✅ React hook for streaming
+- ✅ Real-time progress updates
+
+---
+
+#### Task 2.3.2.2: Progress UI (8 hours)
+
+**Step 1: Progress Component (4 hours)**
+
+`apps/web/components/generation/generation-progress.tsx`:
+```typescript
+'use client'
+
+import { Card } from '@/components/ui/card'
+import { Progress } from '@/components/ui/progress'
+import { CheckCircle2, Loader2, FileCode, AlertCircle } from 'lucide-react'
+import type { GenerationProgress } from '@/hooks/use-code-generation'
+
+interface GenerationProgressProps {
+  progress: GenerationProgress
+}
+
+export function GenerationProgressView({ progress }: GenerationProgressProps) {
+  return (
+    <Card className="p-6">
+      <div className="space-y-4">
+        {/* Status */}
+        <div className="flex items-center gap-3">
+          {progress.status === 'generating' && (
+            <>
+              <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
+              <span className="font-medium">Generating code...</span>
+            </>
+          )}
+          {progress.status === 'complete' && (
+            <>
+              <CheckCircle2 className="h-5 w-5 text-green-500" />
+              <span className="font-medium">Generation complete!</span>
+            </>
+          )}
+          {progress.status === 'error' && (
+            <>
+              <AlertCircle className="h-5 w-5 text-red-500" />
+              <span className="font-medium text-red-500">Error: {progress.error}</span>
+            </>
+          )}
+        </div>
+
+        {/* Current file */}
+        {progress.currentFile && (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <FileCode className="h-4 w-4" />
+            <span>Generating: {progress.currentFile}</span>
+          </div>
+        )}
+
+        {/* Files count */}
+        <div className="text-sm">
+          <span className="font-medium">{progress.filesGenerated}</span> files generated
+        </div>
+
+        {/* Progress bar */}
+        {progress.status === 'generating' && (
+          <Progress value={undefined} className="w-full" />
+        )}
+
+        {/* Content preview */}
+        {progress.content && (
+          <details className="mt-4">
+            <summary className="cursor-pointer text-sm font-medium">
+              View generated code
+            </summary>
+            <pre className="mt-2 overflow-auto rounded-lg bg-gray-100 p-4 text-xs">
+              <code>{progress.content.slice(0, 1000)}...</code>
+            </pre>
+          </details>
+        )}
+      </div>
+    </Card>
+  )
+}
+```
+
+**Step 2: File Tree Component (2 hours)**
+
+`apps/web/components/generation/file-tree.tsx`:
+```typescript
+'use client'
+
+import { File, Folder, ChevronRight, ChevronDown } from 'lucide-react'
+import { useState } from 'react'
+import type { ParsedFile } from '@/lib/codegen/types'
+
+interface FileTreeProps {
+  files: ParsedFile[]
+  onFileSelect?: (file: ParsedFile) => void
+}
+
+export function FileTree({ files, onFileSelect }: FileTreeProps) {
+  const tree = buildTree(files)
+
+  return (
+    <div className="space-y-1">
+      {tree.map((node, idx) => (
+        <TreeNode key={idx} node={node} onFileSelect={onFileSelect} />
+      ))}
+    </div>
+  )
+}
+
+interface TreeNode {
+  name: string
+  type: 'file' | 'directory'
+  file?: ParsedFile
+  children?: TreeNode[]
+}
+
+function TreeNode({
+  node,
+  depth = 0,
+  onFileSelect,
+}: {
+  node: TreeNode
+  depth?: number
+  onFileSelect?: (file: ParsedFile) => void
+}) {
+  const [expanded, setExpanded] = useState(true)
+
+  if (node.type === 'file') {
+    return (
+      <button
+        onClick={() => node.file && onFileSelect?.(node.file)}
+        className="flex items-center gap-2 w-full px-2 py-1 hover:bg-gray-100 rounded"
+        style={{ paddingLeft: `${depth * 16 + 8}px` }}
+      >
+        <File className="h-4 w-4 text-gray-500" />
+        <span className="text-sm">{node.name}</span>
+      </button>
+    )
+  }
+
+  return (
+    <div>
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="flex items-center gap-2 w-full px-2 py-1 hover:bg-gray-100 rounded"
+        style={{ paddingLeft: `${depth * 16 + 8}px` }}
+      >
+        {expanded ? (
+          <ChevronDown className="h-4 w-4" />
+        ) : (
+          <ChevronRight className="h-4 w-4" />
+        )}
+        <Folder className="h-4 w-4 text-blue-500" />
+        <span className="text-sm font-medium">{node.name}</span>
+      </button>
+      {expanded && node.children && (
+        <div>
+          {node.children.map((child, idx) => (
+            <TreeNode
+              key={idx}
+              node={child}
+              depth={depth + 1}
+              onFileSelect={onFileSelect}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function buildTree(files: ParsedFile[]): TreeNode[] {
+  const root: TreeNode = { name: 'root', type: 'directory', children: [] }
+
+  for (const file of files) {
+    const parts = file.path.split('/')
+    let current = root
+
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i]
+      const isLast = i === parts.length - 1
+
+      if (!current.children) current.children = []
+
+      let child = current.children.find((c) => c.name === part)
+
+      if (!child) {
+        child = {
+          name: part,
+          type: isLast ? 'file' : 'directory',
+          file: isLast ? file : undefined,
+          children: isLast ? undefined : [],
+        }
+        current.children.push(child)
+      }
+
+      current = child
+    }
+  }
+
+  return root.children || []
+}
+```
+
+**Step 3: Code Viewer (2 hours)**
+
+`apps/web/components/generation/code-viewer.tsx`:
+```typescript
+'use client'
+
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism'
+import { Copy, Check } from 'lucide-react'
+import { useState } from 'react'
+import { Button } from '@/components/ui/button'
+import type { ParsedFile } from '@/lib/codegen/types'
+
+interface CodeViewerProps {
+  file: ParsedFile
+}
+
+export function CodeViewer({ file }: CodeViewerProps) {
+  const [copied, setCopied] = useState(false)
+
+  const copyCode = async () => {
+    await navigator.clipboard.writeText(file.content)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  return (
+    <div className="rounded-lg border bg-gray-900 overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-2 bg-gray-800 border-b border-gray-700">
+        <div>
+          <p className="font-mono text-sm text-gray-300">{file.path}</p>
+          <p className="text-xs text-gray-500 capitalize">{file.language}</p>
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={copyCode}
+          className="text-gray-300 hover:text-white"
+        >
+          {copied ? (
+            <>
+              <Check className="h-4 w-4 mr-1" />
+              Copied
+            </>
+          ) : (
+            <>
+              <Copy className="h-4 w-4 mr-1" />
+              Copy
+            </>
+          )}
+        </Button>
+      </div>
+
+      {/* Code */}
+      <div className="overflow-auto max-h-[600px]">
+        <SyntaxHighlighter
+          language={file.language}
+          style={vscDarkPlus}
+          showLineNumbers
+          customStyle={{
+            margin: 0,
+            padding: '1rem',
+            background: 'transparent',
+          }}
+        >
+          {file.content}
+        </SyntaxHighlighter>
+      </div>
+    </div>
+  )
+}
+```
+
+**Deliverables:**
+- ✅ Progress component with status indicators
+- ✅ File tree navigation
+- ✅ Code viewer with syntax highlighting
+- ✅ Copy to clipboard functionality
+
+---
+
+### **Story 2.3.2 Summary**
+
+**Completed Tasks:**
+1. ✅ Task 2.3.2.1: Implement Streaming (8 hours)
+2. ✅ Task 2.3.2.2: Progress UI (8 hours)
+
+**Total Time:** 16 hours
+**Story Points:** 7 SP
+
+---
+
+### Story 2.3.3: Download & Export (5 SP, 14 hours)
+
+**Quick Implementation:**
+
+`apps/web/lib/codegen/export.ts`:
+```typescript
+import JSZip from 'jszip'
+import type { ProjectStructure } from './types'
+
+export async function exportAsZip(structure: ProjectStructure): Promise<Blob> {
+  const zip = new JSZip()
+
+  for (const file of structure.files) {
+    zip.file(file.path, file.content)
+  }
+
+  return await zip.generateAsync({ type: 'blob' })
+}
+```
+
+`apps/web/app/api/generate/[id]/download/route.ts`:
+```typescript
+import { apiHandler } from '@/lib/api/handler'
+import { getGeneration } from '@/lib/codegen/service'
+import { exportAsZip } from '@/lib/codegen/export'
+
+export const GET = apiHandler(async (req, { params, userId }) => {
+  const generation = await getGeneration(params.id)
+  if (!generation || generation.userId !== userId) {
+    throw new Error('Not found')
+  }
+
+  const zip = await exportAsZip(generation.structure as any)
+
+  return new Response(zip, {
+    headers: {
+      'Content-Type': 'application/zip',
+      'Content-Disposition': `attachment; filename="${generation.structure.name}.zip"`,
+    },
+  })
+})
+```
+
+**Story 2.3.3 Summary:** 5 SP, 14 hours
+
+---
+
+## Epic 2.3 Complete! (20 SP, 48 hours)
+
+**Sprint 2 Progress:** 65/85 SP (76.5%)
+
+**Remaining:** Epic 2.4 (10 SP) + Epic 2.5 (10 SP)
+
+---
+## Epic 2.4: Template Management System (10 SP, 24 hours)
+
+**Epic Goal:** Build template management for saving, editing, and sharing custom templates.
+
+### Story 2.4.1: Template CRUD (5 SP, 12h)
+
+`apps/web/lib/templates/service.ts`:
+```typescript
+import { prisma } from '@/lib/db'
+
+export async function createTemplate(userId: string, template: any) {
+  return prisma.promptTemplate.create({
+    data: {
+      userId,
+      ...template,
+      active: true,
+    },
+  })
+}
+
+export async function listTemplates(userId?: string) {
+  return prisma.promptTemplate.findMany({
+    where: userId ? { OR: [{ userId }, { public: true }] } : { public: true },
+    orderBy: { createdAt: 'desc' },
+  })
+}
+```
+
+Update Prisma schema:
+```prisma
+model PromptTemplate {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+  userId      String
+  name        String
+  description String
+  category    String
+  version     String
+  content     String   @db.Text
+  variables   Json
+  tags        String[]
+  public      Boolean  @default(false)
+  active      Boolean  @default(true)
+
+  @@map("prompt_templates")
+}
+```
+
+### Story 2.4.2: Template Editor UI (5 SP, 12h)
+
+`apps/web/components/templates/template-editor.tsx`:
+```typescript
+'use client'
+
+import { useState } from 'react'
+import { Textarea } from '@/components/ui/textarea'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
+
+export function TemplateEditor({ template, onSave }: any) {
+  const [content, setContent] = useState(template?.content || '')
+  const [metadata, setMetadata] = useState({
+    name: template?.name || '',
+    description: template?.description || '',
+  })
+
+  return (
+    <div className="space-y-4">
+      <Input
+        placeholder="Template Name"
+        value={metadata.name}
+        onChange={(e) => setMetadata({ ...metadata, name: e.target.value })}
+      />
+      <Input
+        placeholder="Description"
+        value={metadata.description}
+        onChange={(e) => setMetadata({ ...metadata, description: e.target.value })}
+      />
+      <Textarea
+        placeholder="Template content with {{variables}}"
+        value={content}
+        onChange={(e) => setContent(e.target.value)}
+        rows={20}
+        className="font-mono"
+      />
+      <Button onClick={() => onSave({ ...metadata, content })}>
+        Save Template
+      </Button>
+    </div>
+  )
+}
+```
+
+**Epic 2.4 Complete:** 10 SP, 24 hours
+
+---
+
+## Epic 2.5: Validation & Testing (10 SP, 24 hours)
+
+**Epic Goal:** Validate generated code and run automated tests.
+
+### Story 2.5.1: Code Validation (5 SP, 12h)
+
+`apps/web/lib/validation/validator.ts`:
+```typescript
+import { ESLint } from 'eslint'
+import ts from 'typescript'
+
+export async function validateTypeScript(code: string): Promise<ValidationResult> {
+  const errors: string[] = []
+
+  // Compile with TypeScript
+  const result = ts.transpileModule(code, {
+    compilerOptions: {
+      module: ts.ModuleKind.ESNext,
+      target: ts.ScriptTarget.ES2020,
+      jsx: ts.JsxEmit.React,
+    },
+  })
+
+  if (result.diagnostics && result.diagnostics.length > 0) {
+    errors.push(...result.diagnostics.map((d) => d.messageText.toString()))
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+    warnings: [],
+  }
+}
+
+export async function lintCode(code: string): Promise<ValidationResult> {
+  const eslint = new ESLint({
+    baseConfig: {
+      extends: ['next/core-web-vitals'],
+    },
+  })
+
+  const results = await eslint.lintText(code)
+  const errors = results[0]?.messages.filter((m) => m.severity === 2) || []
+  const warnings = results[0]?.messages.filter((m) => m.severity === 1) || []
+
+  return {
+    valid: errors.length === 0,
+    errors: errors.map((e) => `Line ${e.line}: ${e.message}`),
+    warnings: warnings.map((w) => `Line ${w.line}: ${w.message}`),
+  }
+}
+
+interface ValidationResult {
+  valid: boolean
+  errors: string[]
+  warnings: string[]
+}
+```
+
+### Story 2.5.2: Automated Testing (5 SP, 12h)
+
+`apps/web/lib/testing/runner.ts`:
+```typescript
+import { exec } from 'child_process'
+import { promisify } from 'util'
+
+const execAsync = promisify(exec)
+
+export async function runTests(projectPath: string): Promise<TestResult> {
+  try {
+    // Install dependencies
+    await execAsync('npm install', { cwd: projectPath })
+
+    // Run tests
+    const { stdout, stderr } = await execAsync('npm test', { cwd: projectPath })
+
+    return {
+      success: true,
+      output: stdout,
+      errors: stderr ? [stderr] : [],
+    }
+  } catch (error) {
+    return {
+      success: false,
+      output: '',
+      errors: [error.message],
+    }
+  }
+}
+
+interface TestResult {
+  success: boolean
+  output: string
+  errors: string[]
+}
+```
+
+`apps/web/app/api/validate/route.ts`:
+```typescript
+import { apiHandler } from '@/lib/api/handler'
+import { validateTypeScript, lintCode } from '@/lib/validation/validator'
+import { z } from 'zod'
+
+const validateSchema = z.object({
+  code: z.string(),
+  type: z.enum(['typescript', 'lint']),
+})
+
+export const POST = apiHandler(
+  async (req, { body }) => {
+    const { code, type } = body!
+
+    const result =
+      type === 'typescript'
+        ? await validateTypeScript(code)
+        : await lintCode(code)
+
+    return { validation: result }
+  },
+  {
+    requireAuth: true,
+    bodySchema: validateSchema,
+  }
+)
+```
+
+**Epic 2.5 Complete:** 10 SP, 24 hours
+
+---
+
+## SPRINT 2 COMPLETE! 🎉
+
+**Total Story Points:** 85 SP
+**Total Hours:** 204 hours
+**All Epics Complete:**
+- ✅ Epic 2.1: AI Model Integration (20 SP, 48h)
+- ✅ Epic 2.2: Prompt Engineering System (25 SP, 60h)
+- ✅ Epic 2.3: Code Generation Pipeline (20 SP, 48h)
+- ✅ Epic 2.4: Template Management (10 SP, 24h)
+- ✅ Epic 2.5: Validation & Testing (10 SP, 24h)
+
+---

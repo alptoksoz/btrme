@@ -3998,3 +3998,899 @@ async function sendPagerDutyAlert(alert: any) {
 
 ---
 
+
+# Epic 3.3: Database Migrations & Management (15 SP, 36 hours)
+
+**Epic Goal:** Implement robust database migration system with version control and rollback capabilities.
+
+**Business Value:** Enable safe database schema changes, maintain data integrity across environments.
+
+---
+
+## Story 3.3.1: Prisma Migration System
+
+**Story Points:** 7 SP
+**Estimated Hours:** 18 hours
+**Priority:** P0 (Critical)
+**Assignee:** Database Engineer
+
+### User Story
+
+```gherkin
+As a developer
+I want automated database migrations
+So that schema changes are versioned and applied consistently
+```
+
+### Acceptance Criteria
+
+```gherkin
+Scenario: Create new migration
+  Given I have changed the Prisma schema
+  When I run migration command
+  Then a new migration file should be created
+  And it should contain SQL for schema changes
+  And migration should be versioned with timestamp
+
+Scenario: Apply migrations to database
+  Given I have pending migrations
+  When I deploy to staging/production
+  Then migrations should run automatically
+  And database schema should be updated
+  And migration history should be recorded
+
+Scenario: Rollback failed migration
+  Given a migration has failed partway
+  When I trigger rollback
+  Then the database should return to previous state
+  And no partial changes should remain
+
+Scenario: Migration in CI/CD
+  Given migrations run in GitHub Actions
+  When tests execute
+  Then migrations should apply to test database
+  And tests should run against migrated schema
+```
+
+### Tasks
+
+#### Task 3.3.1.1: Configure Prisma migrations
+
+**Estimated Hours:** 3 hours
+
+**Implementation:**
+
+```typescript
+// prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+  previewFeatures = ["fullTextSearch", "postgresqlExtensions"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  extensions = [pgcrypto, uuid_ossp]
+}
+
+// Migration configuration in package.json
+{
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
+  "scripts": {
+    "db:migrate:dev": "prisma migrate dev",
+    "db:migrate:deploy": "prisma migrate deploy",
+    "db:migrate:reset": "prisma migrate reset --skip-seed",
+    "db:migrate:status": "prisma migrate status",
+    "db:push": "prisma db push",
+    "db:seed": "prisma db seed",
+    "db:studio": "prisma studio"
+  }
+}
+```
+
+#### Task 3.3.1.2: Create migration workflow scripts
+
+**Estimated Hours:** 4 hours
+
+**Implementation:**
+
+```bash
+# scripts/db/migrate-dev.sh
+#!/bin/bash
+set -e
+
+echo "🗄️  Running database migrations (development)..."
+
+# Check if DATABASE_URL is set
+if [ -z "$DATABASE_URL" ]; then
+    echo "❌ DATABASE_URL not set!"
+    exit 1
+fi
+
+# Create migration
+read -p "Enter migration name: " MIGRATION_NAME
+
+if [ -z "$MIGRATION_NAME" ]; then
+    echo "❌ Migration name required!"
+    exit 1
+fi
+
+# Generate migration
+echo "📝 Generating migration: $MIGRATION_NAME"
+pnpm prisma migrate dev --name "$MIGRATION_NAME"
+
+# Verify migration
+echo "✅ Migration created successfully!"
+pnpm prisma migrate status
+
+# Generate updated Prisma Client
+echo "🔄 Regenerating Prisma Client..."
+pnpm prisma generate
+
+echo "✨ Done!"
+```
+
+```bash
+# scripts/db/migrate-deploy.sh
+#!/bin/bash
+set -e
+
+echo "🚀 Deploying database migrations..."
+
+# Production safety check
+if [ "$NODE_ENV" = "production" ]; then
+    echo "⚠️  WARNING: Running migrations in PRODUCTION!"
+    read -p "Are you sure? (yes/no): " CONFIRM
+    
+    if [ "$CONFIRM" != "yes" ]; then
+        echo "❌ Migration cancelled"
+        exit 0
+    fi
+fi
+
+# Check pending migrations
+echo "📊 Checking migration status..."
+pnpm prisma migrate status
+
+# Create backup before migration
+echo "💾 Creating database backup..."
+BACKUP_FILE="backup_$(date +%Y%m%d_%H%M%S).sql"
+pg_dump "$DATABASE_URL" > "backups/$BACKUP_FILE"
+echo "✅ Backup created: $BACKUP_FILE"
+
+# Deploy migrations
+echo "🔄 Applying migrations..."
+pnpm prisma migrate deploy
+
+# Verify success
+echo "✅ Migrations deployed successfully!"
+pnpm prisma migrate status
+
+echo "✨ Done!"
+```
+
+```bash
+# scripts/db/rollback.sh
+#!/bin/bash
+set -e
+
+echo "🔄 Rolling back database migration..."
+
+# Get last applied migration
+LAST_MIGRATION=$(ls -t prisma/migrations | head -n 1)
+
+echo "Last migration: $LAST_MIGRATION"
+read -p "Rollback this migration? (yes/no): " CONFIRM
+
+if [ "$CONFIRM" != "yes" ]; then
+    echo "❌ Rollback cancelled"
+    exit 0
+fi
+
+# Restore from backup
+LATEST_BACKUP=$(ls -t backups/*.sql | head -n 1)
+
+if [ -z "$LATEST_BACKUP" ]; then
+    echo "❌ No backup found!"
+    exit 1
+fi
+
+echo "📦 Restoring from backup: $LATEST_BACKUP"
+psql "$DATABASE_URL" < "$LATEST_BACKUP"
+
+echo "✅ Database rolled back successfully!"
+```
+
+#### Task 3.3.1.3: Add migration tests
+
+**Estimated Hours:** 4 hours
+
+**Implementation:**
+
+```typescript
+// __tests__/db/migrations.test.ts
+import { describe, test, expect, beforeAll, afterAll } from 'vitest'
+import { execSync } from 'child_process'
+import { PrismaClient } from '@prisma/client'
+
+const prisma = new PrismaClient()
+
+describe('Database Migrations', () => {
+  afterAll(async () => {
+    await prisma.$disconnect()
+  })
+
+  test('should have migration files', () => {
+    const output = execSync('ls prisma/migrations', { encoding: 'utf-8' })
+    expect(output).toBeTruthy()
+  })
+
+  test('migrations should be applied', async () => {
+    const tables = await prisma.$queryRaw<any[]>`
+      SELECT tablename FROM pg_tables 
+      WHERE schemaname = 'public'
+    `
+    
+    expect(tables.length).toBeGreaterThan(0)
+    expect(tables.some(t => t.tablename === 'User')).toBe(true)
+    expect(tables.some(t => t.tablename === 'Project')).toBe(true)
+  })
+
+  test('migration history should be tracked', async () => {
+    const migrations = await prisma.$queryRaw<any[]>`
+      SELECT * FROM _prisma_migrations
+      ORDER BY finished_at DESC
+    `
+    
+    expect(migrations.length).toBeGreaterThan(0)
+    expect(migrations[0].migration_name).toBeTruthy()
+  })
+
+  test('should rollback migration successfully', async () => {
+    // Create test table
+    await prisma.$executeRaw`
+      CREATE TABLE IF NOT EXISTS test_rollback (
+        id SERIAL PRIMARY KEY,
+        name TEXT
+      )
+    `
+
+    // Verify table exists
+    const before = await prisma.$queryRaw<any[]>`
+      SELECT tablename FROM pg_tables 
+      WHERE tablename = 'test_rollback'
+    `
+    expect(before.length).toBe(1)
+
+    // Drop table (simulate rollback)
+    await prisma.$executeRaw`DROP TABLE test_rollback`
+
+    // Verify table is gone
+    const after = await prisma.$queryRaw<any[]>`
+      SELECT tablename FROM pg_tables 
+      WHERE tablename = 'test_rollback'
+    `
+    expect(after.length).toBe(0)
+  })
+})
+```
+
+### Deliverables
+
+- ✅ Prisma migration configuration
+- ✅ Migration workflow scripts (dev, deploy, rollback)
+- ✅ Automated backup before migrations
+- ✅ Migration status checking
+- ✅ Migration tests
+- ✅ CI/CD integration
+
+---
+
+## Story 3.3.2: Database Seeding System
+
+**Story Points:** 4 SP  
+**Estimated Hours:** 10 hours
+**Priority:** P1 (High)
+
+### User Story
+
+```gherkin
+As a developer
+I want to seed the database with initial data
+So that development and testing environments have realistic data
+```
+
+### Acceptance Criteria
+
+```gherkin
+Scenario: Seed development database
+  Given I have an empty database
+  When I run seed command
+  Then admin user should be created
+  And sample templates should be added
+  And test data should be populated
+
+Scenario: Idempotent seeding
+  Given database already has seed data
+  When I run seed command again
+  Then it should update existing records
+  And not create duplicates
+  And preserve existing user data
+```
+
+### Tasks
+
+#### Task 3.3.2.1: Create seed script
+
+**Estimated Hours:** 5 hours
+
+**Implementation:**
+
+```typescript
+// prisma/seed.ts
+import { PrismaClient, Tier, ProjectStatus } from '@prisma/client'
+import { hash } from 'bcryptjs'
+
+const prisma = new PrismaClient()
+
+async function main() {
+  console.log('🌱 Seeding database...')
+
+  // Create admin user
+  const admin = await prisma.user.upsert({
+    where: { email: 'admin@btrme.com' },
+    update: {},
+    create: {
+      email: 'admin@btrme.com',
+      name: 'Admin User',
+      password: await hash('Admin123!', 10),
+      emailVerified: new Date(),
+      tier: Tier.TEAM,
+    },
+  })
+  console.log('✅ Admin user created:', admin.email)
+
+  // Create sample templates
+  const templates = [
+    {
+      name: 'E-commerce Store',
+      description: 'Full-featured online store with cart, checkout, and payment',
+      category: 'ecommerce',
+      content: `You are an expert in building e-commerce applications...`,
+      variables: JSON.stringify(['storeName', 'productTypes']),
+      tags: ['ecommerce', 'stripe', 'nextjs'],
+      public: true,
+      active: true,
+      userId: admin.id,
+    },
+    {
+      name: 'SaaS Dashboard',
+      description: 'Complete SaaS application with authentication and subscriptions',
+      category: 'saas',
+      content: `You are an expert in building SaaS platforms...`,
+      variables: JSON.stringify(['appName', 'features']),
+      tags: ['saas', 'dashboard', 'auth'],
+      public: true,
+      active: true,
+      userId: admin.id,
+    },
+  ]
+
+  for (const template of templates) {
+    await prisma.promptTemplate.upsert({
+      where: {
+        userId_name: {
+          userId: admin.id,
+          name: template.name,
+        },
+      },
+      update: template,
+      create: template,
+    })
+  }
+  console.log(`✅ ${templates.length} templates seeded`)
+
+  // Create sample projects (dev only)
+  if (process.env.NODE_ENV === 'development') {
+    const projects = [
+      {
+        userId: admin.id,
+        name: 'My Todo App',
+        description: 'Simple todo application',
+        status: ProjectStatus.DEPLOYED,
+        structure: JSON.stringify({
+          files: [
+            { path: 'app/page.tsx', content: '...' },
+          ],
+        }),
+      },
+    ]
+
+    for (const project of projects) {
+      await prisma.project.create({ data: project })
+    }
+    console.log(`✅ ${projects.length} sample projects created`)
+  }
+
+  console.log('✨ Seeding complete!')
+}
+
+main()
+  .catch((e) => {
+    console.error('❌ Seeding failed:', e)
+    process.exit(1)
+  })
+  .finally(async () => {
+    await prisma.$disconnect()
+  })
+```
+
+### Deliverables
+
+- ✅ Comprehensive seed script
+- ✅ Idempotent upsert operations
+- ✅ Environment-specific seeding
+- ✅ Seed documentation
+
+---
+
+## Story 3.3.3: Database Backup & Recovery
+
+**Story Points:** 4 SP
+**Estimated Hours:** 8 hours  
+**Priority:** P1 (High)
+
+### Implementation
+
+```bash
+# scripts/db/backup.sh
+#!/bin/bash
+set -e
+
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+BACKUP_DIR="backups"
+BACKUP_FILE="$BACKUP_DIR/db_backup_$TIMESTAMP.sql"
+
+mkdir -p $BACKUP_DIR
+
+echo "💾 Creating database backup..."
+pg_dump $DATABASE_URL > $BACKUP_FILE
+gzip $BACKUP_FILE
+
+echo "✅ Backup created: ${BACKUP_FILE}.gz"
+```
+
+### Deliverables
+
+- ✅ Automated backup scripts
+- ✅ Recovery procedures
+- ✅ Backup verification
+
+---
+
+## Epic 3.3 Complete! ✅
+
+**Total:** 15 SP, 36 hours
+
+---
+
+
+# Epic 3.4: Environment Management (15 SP, 36 hours)
+
+**Epic Goal:** Manage environment-specific configurations securely across all deployment stages.
+
+---
+
+## Story 3.4.1: Environment Configuration System
+
+**Story Points:** 6 SP
+**Estimated Hours:** 15 hours
+**Priority:** P0 (Critical)
+
+### User Story
+
+```gherkin
+As a developer
+I want environment-specific configuration
+So that each environment has appropriate settings
+```
+
+### Implementation
+
+```typescript
+// apps/web/lib/config/env.ts
+import { z } from 'zod'
+
+const envSchema = z.object({
+  NODE_ENV: z.enum(['development', 'staging', 'production']),
+  DATABASE_URL: z.string().url(),
+  REDIS_URL: z.string().url(),
+  NEXTAUTH_URL: z.string().url(),
+  NEXTAUTH_SECRET: z.string().min(32),
+  OPENAI_API_KEY: z.string().startsWith('sk-'),
+  ANTHROPIC_API_KEY: z.string().startsWith('sk-ant-'),
+  SENTRY_DSN: z.string().url().optional(),
+})
+
+export const env = envSchema.parse(process.env)
+
+export function validateEnv() {
+  try {
+    envSchema.parse(process.env)
+    console.log('✅ Environment variables validated')
+    return true
+  } catch (error) {
+    console.error('❌ Invalid environment:', error)
+    process.exit(1)
+  }
+}
+```
+
+**Environment Files:**
+
+```.env.development
+NODE_ENV=development
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/btrme_dev
+REDIS_URL=redis://localhost:6379
+NEXTAUTH_URL=http://localhost:3000
+```
+
+```.env.production
+NODE_ENV=production
+DATABASE_URL=${DATABASE_URL}
+REDIS_URL=${REDIS_URL}
+NEXTAUTH_URL=https://btrme.com
+```
+
+### Deliverables
+
+- ✅ Environment validation with Zod
+- ✅ Environment-specific configs
+- ✅ Type-safe environment access
+- ✅ Validation on startup
+
+---
+
+## Story 3.4.2: Feature Flags System
+
+**Story Points:** 5 SP
+**Estimated Hours:** 12 hours
+
+### Implementation
+
+```typescript
+// apps/web/lib/features/flags.ts
+export const FEATURES = {
+  AI_GENERATION: getEnvFlag('FEATURE_AI_GENERATION', true),
+  TEMPLATE_MARKETPLACE: getEnvFlag('FEATURE_MARKETPLACE', true),
+  REALTIME_COLLAB: getEnvFlag('FEATURE_COLLAB', false),
+  ADVANCED_ANALYTICS: getEnvFlag('FEATURE_ANALYTICS', false),
+} as const
+
+function getEnvFlag(name: string, defaultValue: boolean): boolean {
+  const value = process.env[name]
+  if (value === undefined) return defaultValue
+  return value === 'true' || value === '1'
+}
+
+export function isFeatureEnabled(feature: keyof typeof FEATURES): boolean {
+  return FEATURES[feature]
+}
+```
+
+### Deliverables
+
+- ✅ Feature flag system
+- ✅ Environment-based toggles
+- ✅ Runtime feature checks
+
+---
+
+## Story 3.4.3: Secrets Management
+
+**Story Points:** 4 SP
+**Estimated Hours:** 9 hours
+
+### Implementation
+
+```bash
+# Using Vercel secrets
+vercel secrets add database-url "postgresql://..."
+vercel secrets add redis-url "redis://..."
+vercel secrets add nextauth-secret "..."
+
+# Using GitHub secrets for CI/CD
+gh secret set DATABASE_URL --body "postgresql://..."
+gh secret set OPENAI_API_KEY --body "sk-..."
+```
+
+### Deliverables
+
+- ✅ Secrets stored in Vercel
+- ✅ GitHub Actions secrets
+- ✅ No secrets in codebase
+- ✅ Secret rotation procedures
+
+---
+
+## Epic 3.4 Complete! ✅
+
+**Total:** 15 SP, 36 hours
+
+---
+
+
+# Epic 3.5: Monitoring & Logging (15 SP, 36 hours)
+
+**Epic Goal:** Implement comprehensive monitoring, logging, and alerting for production systems.
+
+---
+
+## Story 3.5.1: Application Monitoring with Sentry
+
+**Story Points:** 6 SP
+**Estimated Hours:** 15 hours
+**Priority:** P0 (Critical)
+
+### User Story
+
+```gherkin
+As a DevOps engineer
+I want real-time error monitoring
+So that I can detect and fix issues quickly
+```
+
+### Implementation
+
+```typescript
+// apps/web/lib/monitoring/sentry.ts
+import * as Sentry from '@sentry/nextjs'
+
+Sentry.init({
+  dsn: process.env.SENTRY_DSN,
+  environment: process.env.NODE_ENV,
+  
+  tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
+  
+  beforeSend(event, hint) {
+    // Filter out sensitive data
+    if (event.request) {
+      delete event.request.cookies
+      delete event.request.headers?.authorization
+    }
+    return event
+  },
+  
+  integrations: [
+    new Sentry.Integrations.Http({ tracing: true }),
+    new Sentry.Integrations.Prisma({ client: prisma }),
+  ],
+})
+
+export function captureError(error: Error, context?: Record<string, any>) {
+  Sentry.captureException(error, {
+    contexts: { custom: context },
+  })
+}
+```
+
+**Usage in API routes:**
+
+```typescript
+// apps/web/app/api/generate/route.ts
+import { captureError } from '@/lib/monitoring/sentry'
+
+export async function POST(req: Request) {
+  try {
+    const result = await generateCode(input)
+    return NextResponse.json(result)
+  } catch (error) {
+    captureError(error as Error, {
+      userId: session.user.id,
+      input,
+    })
+    return NextResponse.json({ error: 'Generation failed' }, { status: 500 })
+  }
+}
+```
+
+### Deliverables
+
+- ✅ Sentry integration
+- ✅ Error tracking
+- ✅ Performance monitoring
+- ✅ User context tracking
+
+---
+
+## Story 3.5.2: Structured Logging with Pino
+
+**Story Points:** 5 SP
+**Estimated Hours:** 12 hours
+
+### Implementation
+
+```typescript
+// apps/web/lib/logging/logger.ts
+import pino from 'pino'
+
+export const logger = pino({
+  level: process.env.LOG_LEVEL || 'info',
+  formatters: {
+    level: (label) => ({ level: label }),
+  },
+  timestamp: pino.stdTimeFunctions.isoTime,
+  ...(process.env.NODE_ENV === 'development' && {
+    transport: {
+      target: 'pino-pretty',
+      options: {
+        colorize: true,
+        translateTime: 'SYS:standard',
+        ignore: 'pid,hostname',
+      },
+    },
+  }),
+})
+
+// Middleware for request logging
+export function logRequest(req: Request, duration: number) {
+  logger.info({
+    type: 'http.request',
+    method: req.method,
+    url: req.url,
+    duration,
+    userAgent: req.headers.get('user-agent'),
+  })
+}
+
+export function logError(error: Error, context?: Record<string, any>) {
+  logger.error({
+    type: 'error',
+    message: error.message,
+    stack: error.stack,
+    ...context,
+  })
+}
+```
+
+### Deliverables
+
+- ✅ Structured logging
+- ✅ Log levels (debug, info, warn, error)
+- ✅ Request/response logging
+- ✅ Pretty printing for development
+
+---
+
+## Story 3.5.3: Performance Monitoring
+
+**Story Points:** 4 SP
+**Estimated Hours:** 9 hours
+
+### Implementation
+
+```typescript
+// apps/web/lib/monitoring/performance.ts
+import { performance } from 'perf_hooks'
+
+export async function measureAsync<T>(
+  name: string,
+  fn: () => Promise<T>
+): Promise<T> {
+  const start = performance.now()
+  
+  try {
+    const result = await fn()
+    const duration = performance.now() - start
+    
+    logger.debug({
+      type: 'performance',
+      operation: name,
+      duration,
+    })
+    
+    // Send to monitoring service
+    if (duration > 1000) {
+      logger.warn({
+        type: 'slow_operation',
+        operation: name,
+        duration,
+      })
+    }
+    
+    return result
+  } catch (error) {
+    const duration = performance.now() - start
+    logger.error({
+      type: 'performance_error',
+      operation: name,
+      duration,
+      error,
+    })
+    throw error
+  }
+}
+
+// Usage
+const result = await measureAsync('generate_code', async () => {
+  return await openai.chat.completions.create({ ... })
+})
+```
+
+### Deliverables
+
+- ✅ Performance measurement utilities
+- ✅ Slow operation detection
+- ✅ Memory usage tracking
+- ✅ Database query monitoring
+
+---
+
+## Epic 3.5 Complete! ✅
+
+**Total:** 15 SP, 36 hours
+
+---
+
+# SPRINT 3 COMPLETE! 🎉
+
+## Summary
+
+**Sprint 3: Deployment Pipeline & Infrastructure**
+**Total Story Points:** 90 SP
+**Total Hours:** 216 hours
+**Team:** 8 senior engineers
+
+### Epics Completed
+
+✅ **Epic 3.1: CI/CD Pipeline** (25 SP, 60h)
+- GitHub Actions CI workflow
+- Automated deployment pipeline with canary
+- Code quality & security automation
+
+✅ **Epic 3.2: Containerization** (20 SP, 48h)
+- Docker multi-stage builds
+- Docker Compose for local development
+- Production container orchestration (Fly.io)
+
+✅ **Epic 3.3: Database Management** (15 SP, 36h)
+- Prisma migration system
+- Database seeding
+- Backup & recovery procedures
+
+✅ **Epic 3.4: Environment Management** (15 SP, 36h)
+- Environment configuration system
+- Feature flags
+- Secrets management
+
+✅ **Epic 3.5: Monitoring & Logging** (15 SP, 36h)
+- Sentry error monitoring
+- Structured logging with Pino
+- Performance monitoring
+
+### Key Achievements
+
+- 🚀 **Zero-downtime deployments** with canary strategy
+- 🐳 **Containerized** all services with Docker
+- 🗄️ **Database migrations** with rollback support
+- 🔒 **Secure** environment and secrets management
+- 📊 **Comprehensive monitoring** with Sentry + Pino
+- ⚡ **Fast CI/CD** with caching (< 5 min builds)
+- 🎯 **Production-ready** infrastructure
+
+### Technical Stack
+
+- **CI/CD:** GitHub Actions
+- **Containers:** Docker, Docker Compose
+- **Deployment:** Vercel (frontend), Fly.io (backend)
+- **Database:** PostgreSQL with Prisma
+- **Monitoring:** Sentry, Pino
+- **Secrets:** Vercel Secrets, GitHub Secrets
+
+---
+
+**Sprint Status:** ✅ COMPLETE
+**Next Sprint:** Sprint 4 - Templates & Iteration Engine
+

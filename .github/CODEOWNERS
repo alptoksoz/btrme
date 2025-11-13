@@ -1,0 +1,17 @@
+# Code Owners
+# These owners will be the default owners for everything in the repo.
+# Unless a later match takes precedence, @alptoksoz will be requested for review.
+
+* @alptoksoz
+
+# Application code
+/apps/web/ @alptoksoz
+/packages/ @alptoksoz
+
+# Documentation
+*.md @alptoksoz
+
+# Configuration files
+/.github/ @alptoksoz
+/prisma/ @alptoksoz
+*.config.* @alptoksoz

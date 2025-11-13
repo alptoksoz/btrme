@@ -1,0 +1,53 @@
+{
+  "name": "btrme",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AI-Powered NoCode Builder - Transform prompts into deployed apps",
+  "keywords": [
+    "ai",
+    "nocode",
+    "builder",
+    "code-generation",
+    "nextjs"
+  ],
+  "homepage": "https://btrme.com",
+  "bugs": {
+    "url": "https://github.com/alptoksoz/btrme/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alptoksoz/btrme.git"
+  },
+  "license": "MIT",
+  "author": "BTRMe Team",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "turbo build",
+    "dev": "turbo dev",
+    "lint": "turbo lint",
+    "format": "prettier --write \"**/*.{ts,tsx,md,json}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,md,json}\"",
+    "test": "turbo test",
+    "test:coverage": "turbo test:coverage",
+    "test:e2e": "turbo test:e2e",
+    "type-check": "turbo type-check",
+    "clean": "turbo clean && rm -rf node_modules",
+    "prepare": "husky install"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.24",
+    "husky": "^9.0.11",
+    "lint-staged": "^15.2.2",
+    "prettier": "^3.2.5",
+    "turbo": "^1.12.5",
+    "typescript": "^5.4.2"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=8.0.0"
+  },
+  "packageManager": "pnpm@8.15.4"
+}

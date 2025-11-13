@@ -2824,3 +2824,1629 @@ Has backend
 
 ---
 
+#### Task 2.2.1.2: Build Template Library (10 hours)
+
+**Implementation Steps:**
+
+**Step 1: Create Base Template Structure (2 hours)**
+
+Create the base template that all specific templates will extend.
+
+`apps/web/lib/prompts/templates/_base.hbs`:
+```handlebars
+---
+id: base
+name: Base Template
+description: Base template for all code generation
+category: web-app
+version: 1.0.0
+author: BTRMe System
+tags: [base]
+variables: []
+---
+
+# SYSTEM
+
+You are an expert software engineer specializing in modern web development. You write clean, maintainable, production-ready code following industry best practices.
+
+Your expertise includes:
+- Modern JavaScript/TypeScript
+- React and Next.js
+- RESTful and GraphQL APIs
+- Database design and optimization
+- Security best practices
+- Performance optimization
+- Testing (unit, integration, e2e)
+- Accessibility (WCAG 2.1)
+
+You always:
+- Write type-safe code
+- Include proper error handling
+- Add helpful comments for complex logic
+- Follow the project's coding standards
+- Consider edge cases
+- Think about scalability and performance
+
+# CONTEXT
+
+**Project Type:** {{userInput.description}}
+
+**Tech Stack:**
+{{#if techStack.frontend}}
+- Frontend: {{techStack.frontend.framework}} with {{techStack.frontend.styling}}
+{{#if techStack.frontend.stateManagement}}
+- State Management: {{techStack.frontend.stateManagement}}
+{{/if}}
+{{/if}}
+
+{{#if techStack.backend}}
+- Backend: {{techStack.backend.framework}}
+- Database: {{techStack.backend.database}}
+{{#if techStack.backend.orm}}
+- ORM: {{techStack.backend.orm}}
+{{/if}}
+{{/if}}
+
+{{#if techStack.deployment}}
+- Deployment: {{techStack.deployment.platform}}
+{{/if}}
+
+**Key Features:**
+{{formatList userInput.features}}
+
+{{#if userInput.preferences}}
+**User Preferences:**
+{{json userInput.preferences}}
+{{/if}}
+
+# REQUIREMENTS
+
+Generate a complete, production-ready implementation with:
+
+1. **Full Source Code**
+   - All necessary files with complete implementation
+   - No placeholders or TODOs
+   - Proper file organization
+
+2. **Type Safety**
+   - TypeScript types/interfaces for all data structures
+   - Proper type annotations
+   - Zod schemas for validation
+
+3. **Error Handling**
+   - Try-catch blocks where appropriate
+   - User-friendly error messages
+   - Proper error logging
+
+4. **Security**
+   - Input validation and sanitization
+   - SQL injection prevention
+   - XSS protection
+   - CSRF tokens where needed
+   - Secure authentication/authorization
+
+5. **Testing**
+   - Example unit tests for key functions
+   - Integration test examples
+   - Test data and mocks
+
+6. **Documentation**
+   - JSDoc comments for functions
+   - README with setup instructions
+   - API documentation if applicable
+
+# CONSTRAINTS
+
+- Use only the specified tech stack
+- Follow Next.js 14 App Router conventions
+- Use Server Components by default, Client Components when needed
+- Implement proper loading and error states
+- Ensure mobile responsiveness
+- Follow accessibility guidelines (WCAG 2.1 AA)
+- Keep bundle size reasonable
+- Optimize for Core Web Vitals
+
+# OUTPUT
+
+Provide the implementation in the following structure:
+
+## 1. File Structure
+```
+Show the complete directory structure
+```
+
+## 2. Source Code
+
+For each file, provide:
+
+### `path/to/file.ts`
+```typescript
+// Complete file contents
+```
+
+## 3. Database Schema (if applicable)
+
+```prisma
+// Prisma schema
+```
+
+## 4. Configuration Files
+
+Any necessary config files (tsconfig.json, .env.example, etc.)
+
+## 5. Setup Instructions
+
+Step-by-step instructions to run the project
+
+## 6. Testing
+
+Example test cases and how to run them
+
+## 7. Deployment Notes
+
+Any important deployment considerations
+```
+
+**Step 2: Create Web App Template (2 hours)**
+
+`apps/web/lib/prompts/templates/web-app.hbs`:
+```handlebars
+---
+id: web-app
+name: Web Application
+description: Full-stack web application with Next.js
+category: web-app
+version: 1.0.0
+author: BTRMe System
+tags: [nextjs, react, web, fullstack]
+variables:
+  - name: appName
+    type: string
+    required: true
+    description: Name of the application
+  - name: authRequired
+    type: boolean
+    required: false
+    default: true
+    description: Whether authentication is required
+  - name: databaseType
+    type: string
+    required: false
+    default: postgresql
+    description: Database type
+    validation:
+      enum: [postgresql, mysql, mongodb, sqlite]
+  - name: deploymentTarget
+    type: string
+    required: false
+    default: vercel
+    description: Deployment platform
+    validation:
+      enum: [vercel, netlify, fly.io, aws, gcp]
+defaultTechStack:
+  frontend:
+    framework: Next.js 14
+    styling: Tailwind CSS
+    stateManagement: React Context
+  backend:
+    framework: Next.js API Routes
+    database: PostgreSQL
+    orm: Prisma
+  deployment:
+    platform: Vercel
+---
+
+# SYSTEM
+
+You are an expert Next.js developer building production-ready web applications. You specialize in the Next.js 14 App Router, React Server Components, and modern full-stack development.
+
+# CONTEXT
+
+**Application Name:** {{appName}}
+
+**Application Description:** {{userInput.description}}
+
+**Database:** {{databaseType}}
+
+**Authentication Required:** {{#if authRequired}}Yes{{else}}No{{/if}}
+
+**Deployment Target:** {{deploymentTarget}}
+
+**Tech Stack:**
+- Framework: Next.js 14 (App Router)
+- Language: TypeScript
+- Styling: Tailwind CSS
+- Database: {{databaseType}}
+{{#if_eq databaseType "postgresql"}}
+- ORM: Prisma
+{{/if_eq}}
+{{#if_eq databaseType "mongodb"}}
+- ODM: Mongoose
+{{/if_eq}}
+{{#if authRequired}}
+- Auth: NextAuth.js v5
+{{/if}}
+
+**Required Features:**
+{{formatList userInput.features}}
+
+# REQUIREMENTS
+
+Create a complete Next.js 14 web application with:
+
+## Architecture
+- App Router with Server Components by default
+- Client Components only where interactivity is needed
+- API Routes for backend logic
+- Middleware for auth and request processing
+- Proper data fetching with React Suspense
+
+## Pages & Routes
+Generate pages for each feature including:
+- Home page (/)
+- Feature-specific pages
+{{#if authRequired}}
+- Authentication pages (/login, /signup)
+- Protected user dashboard
+{{/if}}
+- Error pages (404, 500)
+
+## Components
+- Reusable UI components
+- Server Components for static content
+- Client Components for interactive elements
+- Loading skeletons
+- Error boundaries
+
+## Data Layer
+- Prisma schema with relationships
+- Database models for all entities
+- CRUD operations
+- Data validation with Zod
+- Error handling
+
+## API Routes
+- RESTful API structure
+- Input validation
+- Error responses
+- Rate limiting considerations
+{{#if authRequired}}
+- Protected routes with auth checks
+{{/if}}
+
+## Styling
+- Tailwind CSS utility classes
+- Responsive design (mobile-first)
+- Dark mode support
+- Consistent spacing and colors
+- Accessible form inputs
+
+{{#if authRequired}}
+## Authentication
+- NextAuth.js configuration
+- Email/password authentication
+- OAuth providers (Google, GitHub)
+- Session management
+- Protected routes and API endpoints
+- Role-based access control if needed
+{{/if}}
+
+## Performance
+- Image optimization with next/image
+- Font optimization
+- Code splitting
+- Lazy loading
+- Caching strategies
+
+## Security
+- Environment variables for secrets
+- CORS configuration
+- Rate limiting
+- Input sanitization
+- SQL injection prevention
+- XSS protection
+
+# CONSTRAINTS
+
+- Use Next.js 14 App Router (not Pages Router)
+- Use Server Components by default
+- Use 'use client' directive only when necessary
+- Follow Next.js file-based routing conventions
+- Use TypeScript for all files
+- Follow React hooks rules
+- Implement proper error boundaries
+- Use Suspense for async components
+- Follow Tailwind CSS best practices
+- Ensure WCAG 2.1 AA compliance
+
+# OUTPUT
+
+## 1. Project Structure
+
+```
+{{appName}}/
+├── app/
+│   ├── (auth)/
+│   │   ├── login/
+│   │   │   └── page.tsx
+│   │   └── signup/
+│   │       └── page.tsx
+│   ├── (dashboard)/
+│   │   └── dashboard/
+│   │       └── page.tsx
+│   ├── api/
+│   │   └── [...routes]/
+│   ├── layout.tsx
+│   ├── page.tsx
+│   ├── loading.tsx
+│   └── error.tsx
+├── components/
+│   ├── ui/
+│   ├── forms/
+│   └── layouts/
+├── lib/
+│   ├── db.ts
+│   ├── auth.ts
+│   ├── utils.ts
+│   └── validations.ts
+├── prisma/
+│   └── schema.prisma
+├── public/
+├── .env.example
+├── next.config.js
+├── tailwind.config.ts
+├── tsconfig.json
+└── package.json
+```
+
+## 2. Implementation
+
+Provide complete implementation for all files following Next.js 14 best practices.
+
+## 3. Database Setup
+
+```bash
+# Commands to set up database
+npx prisma generate
+npx prisma db push
+npx prisma db seed
+```
+
+## 4. Environment Variables
+
+```env
+# .env.example with all required variables
+```
+
+## 5. Installation & Running
+
+```bash
+# Step-by-step setup instructions
+```
+
+## 6. Testing Examples
+
+Include test examples for:
+- API routes
+- Server actions
+- Utility functions
+- Components
+
+## 7. Deployment
+
+Instructions for deploying to {{deploymentTarget}}
+```
+
+**Step 3: Create API Template (2 hours)**
+
+`apps/web/lib/prompts/templates/api.hbs`:
+```handlebars
+---
+id: api
+name: REST API
+description: RESTful API with Next.js API routes
+category: api
+version: 1.0.0
+author: BTRMe System
+tags: [api, rest, backend]
+variables:
+  - name: apiName
+    type: string
+    required: true
+    description: Name of the API
+  - name: authType
+    type: string
+    required: false
+    default: jwt
+    description: Authentication type
+    validation:
+      enum: [jwt, api-key, oauth, none]
+  - name: resources
+    type: array
+    required: true
+    description: API resources (e.g., users, posts, products)
+    validation:
+      min: 1
+      max: 10
+defaultTechStack:
+  backend:
+    framework: Next.js API Routes
+    database: PostgreSQL
+    orm: Prisma
+---
+
+# SYSTEM
+
+You are an expert backend developer specializing in RESTful API design. You build secure, scalable, well-documented APIs following REST principles and industry best practices.
+
+# CONTEXT
+
+**API Name:** {{apiName}}
+
+**Description:** {{userInput.description}}
+
+**Authentication:** {{authType}}
+
+**Resources:** {{join resources ", "}}
+
+**Tech Stack:**
+- Framework: Next.js 14 API Routes
+- Language: TypeScript
+- Database: PostgreSQL
+- ORM: Prisma
+- Validation: Zod
+{{#if_eq authType "jwt"}}
+- Auth: JWT with NextAuth.js
+{{/if_eq}}
+
+**Required Features:**
+{{formatList userInput.features}}
+
+# REQUIREMENTS
+
+Create a complete REST API with:
+
+## API Design
+- RESTful endpoint structure
+- Proper HTTP methods (GET, POST, PUT, PATCH, DELETE)
+- Consistent response format
+- Pagination for list endpoints
+- Filtering and sorting
+- Versioning strategy (v1, v2)
+
+## Endpoints
+For each resource in {{json resources}}, create:
+- GET /api/v1/{resource} - List all
+- GET /api/v1/{resource}/{id} - Get one
+- POST /api/v1/{resource} - Create
+- PUT /api/v1/{resource}/{id} - Update (full)
+- PATCH /api/v1/{resource}/{id} - Update (partial)
+- DELETE /api/v1/{resource}/{id} - Delete
+
+## Request/Response
+- JSON request bodies
+- JSON responses
+- Proper status codes
+- Error messages with codes
+- Request validation
+- Response serialization
+
+## Authentication & Authorization
+{{#if_eq authType "jwt"}}
+- JWT token generation
+- Token verification middleware
+- Refresh token mechanism
+- Password hashing
+{{/if_eq}}
+{{#if_eq authType "api-key"}}
+- API key generation
+- API key validation
+- Rate limiting per key
+{{/if_eq}}
+{{#if_eq authType "oauth"}}
+- OAuth 2.0 flow
+- Token exchange
+- Scope validation
+{{/if_eq}}
+- Protected routes
+- Role-based access control
+
+## Data Validation
+- Zod schemas for all inputs
+- Type-safe validation
+- Custom validation rules
+- Detailed error messages
+
+## Error Handling
+- Global error handler
+- Custom error classes
+- Consistent error format
+- Error logging
+- Stack traces in development only
+
+## Database
+- Prisma schema with relationships
+- Indexes for performance
+- Unique constraints
+- Default values
+- Cascading deletes
+
+## Performance
+- Database query optimization
+- Response caching
+- Rate limiting
+- Query result pagination
+- Connection pooling
+
+## Documentation
+- OpenAPI/Swagger specification
+- Endpoint descriptions
+- Request/response examples
+- Authentication instructions
+- Error code reference
+
+# CONSTRAINTS
+
+- Follow REST principles
+- Use proper HTTP status codes
+- Implement HATEOAS if applicable
+- Use TypeScript for type safety
+- Validate all inputs
+- Never expose sensitive data
+- Log all errors
+- Rate limit all endpoints
+- Use database transactions where needed
+- Follow security best practices (OWASP)
+
+# OUTPUT
+
+## 1. API Structure
+
+```
+api/
+├── v1/
+│   ├── {resource}/
+│   │   ├── route.ts (GET, POST)
+│   │   └── [id]/
+│   │       └── route.ts (GET, PUT, PATCH, DELETE)
+│   └── auth/
+│       ├── login/route.ts
+│       ├── register/route.ts
+│       └── refresh/route.ts
+└── middleware.ts
+```
+
+## 2. Complete Implementation
+
+Provide full code for:
+- All API routes
+- Middleware
+- Database models
+- Validation schemas
+- Error handlers
+- Utilities
+
+## 3. Database Schema
+
+Complete Prisma schema with relationships
+
+## 4. API Documentation
+
+OpenAPI/Swagger specification
+
+## 5. Testing
+
+Example tests for all endpoints
+
+## 6. Usage Examples
+
+curl examples for each endpoint
+```
+**Step 4: Create Landing Page Template (2 hours)**
+
+`apps/web/lib/prompts/templates/landing-page.hbs`:
+```handlebars
+---
+id: landing-page
+name: Landing Page
+description: Marketing landing page with conversion focus
+category: landing-page
+version: 1.0.0
+author: BTRMe System
+tags: [landing, marketing, conversion]
+variables:
+  - name: productName
+    type: string
+    required: true
+    description: Product or service name
+  - name: cta
+    type: string
+    required: true
+    description: Primary call-to-action text
+  - name: sections
+    type: array
+    required: false
+    default: [hero, features, pricing, testimonials, cta, footer]
+    description: Page sections to include
+defaultTechStack:
+  frontend:
+    framework: Next.js 14
+    styling: Tailwind CSS
+  deployment:
+    platform: Vercel
+---
+
+# SYSTEM
+
+You are an expert frontend developer specializing in high-converting landing pages. You build beautiful, responsive, accessible pages that drive user action.
+
+# CONTEXT
+
+**Product Name:** {{productName}}
+
+**Description:** {{userInput.description}}
+
+**Call to Action:** {{cta}}
+
+**Sections:** {{join sections ", "}}
+
+**Tech Stack:**
+- Next.js 14 (App Router)
+- TypeScript
+- Tailwind CSS
+- Framer Motion (animations)
+- React Hook Form (forms)
+
+**Key Features to Highlight:**
+{{formatList userInput.features}}
+
+# REQUIREMENTS
+
+Create a modern, conversion-optimized landing page with:
+
+## Sections
+
+### Hero Section
+- Attention-grabbing headline
+- Compelling subheadline
+- Primary CTA button
+- Hero image or video
+- Social proof (logos, stats)
+
+### Features Section
+- Feature grid or list
+- Icons for each feature
+- Clear benefit statements
+- Supporting imagery
+
+### Pricing Section
+- Pricing tiers
+- Feature comparison
+- Highlight recommended plan
+- CTA buttons for each tier
+
+### Testimonials Section
+- Customer quotes
+- Photos and names
+- Company/role information
+- Star ratings
+
+### FAQ Section
+- Common questions
+- Expandable answers
+- Clear, helpful responses
+
+### Final CTA Section
+- Strong call to action
+- Urgency or scarcity if appropriate
+- Risk reversal (guarantee, free trial)
+
+### Footer
+- Links to legal pages
+- Social media links
+- Contact information
+- Newsletter signup
+
+## Design
+- Modern, clean aesthetic
+- Consistent color scheme
+- Professional typography
+- Whitespace for readability
+- High-quality images
+- Smooth animations
+- Mobile-first responsive
+
+## Conversion Optimization
+- Clear value proposition
+- Prominent CTAs
+- Social proof elements
+- Trust indicators
+- Minimal friction
+- Fast loading time
+- A/B test ready
+
+## Technical
+- Server Components for static content
+- Client Components for interactive elements
+- Optimized images (next/image)
+- SEO meta tags
+- Structured data (JSON-LD)
+- Open Graph tags
+- Analytics ready
+
+## Forms
+- Email capture
+- Validation
+- Loading states
+- Success messages
+- Error handling
+- Spam protection
+
+## Performance
+- Core Web Vitals optimized
+- Lazy loading
+- Image optimization
+- Font optimization
+- Minimal JavaScript
+- CSS optimization
+
+# CONSTRAINTS
+
+- Mobile-first approach
+- Page load under 2 seconds
+- Accessibility (WCAG 2.1 AA)
+- Cross-browser compatibility
+- No jQuery or legacy dependencies
+- Semantic HTML
+- SEO friendly
+- Privacy compliant (GDPR, CCPA)
+
+# OUTPUT
+
+## 1. Page Structure
+
+Complete component tree for the landing page
+
+## 2. Implementation
+
+Full code for:
+- Page component
+- Section components
+- UI components
+- Forms
+- Animations
+- Styles
+
+## 3. Assets
+
+List required:
+- Images
+- Icons
+- Fonts
+
+## 4. SEO & Meta
+
+- Title and description
+- Meta tags
+- Structured data
+- Sitemap
+
+## 5. Analytics
+
+Integration points for:
+- Google Analytics
+- Facebook Pixel
+- Conversion tracking
+
+## 6. Performance
+
+Optimization checklist and lighthouse score targets
+```
+
+**Step 5: Create Dashboard Template (2 hours)**
+
+`apps/web/lib/prompts/templates/dashboard.hbs`:
+```handlebars
+---
+id: dashboard
+name: Admin Dashboard
+description: Data visualization and management dashboard
+category: dashboard
+version: 1.0.0
+author: BTRMe System
+tags: [dashboard, admin, analytics, data-viz]
+variables:
+  - name: dashboardName
+    type: string
+    required: true
+    description: Name of the dashboard
+  - name: dataEntities
+    type: array
+    required: true
+    description: Entities to manage (e.g., users, orders, products)
+    validation:
+      min: 1
+      max: 10
+  - name: charts
+    type: array
+    required: false
+    default: [line, bar, pie, area]
+    description: Chart types needed
+defaultTechStack:
+  frontend:
+    framework: Next.js 14
+    styling: Tailwind CSS
+    stateManagement: React Context
+  backend:
+    framework: Next.js API Routes
+    database: PostgreSQL
+    orm: Prisma
+---
+
+# SYSTEM
+
+You are an expert in building data-rich admin dashboards. You create intuitive, performant interfaces for data visualization and management.
+
+# CONTEXT
+
+**Dashboard Name:** {{dashboardName}}
+
+**Description:** {{userInput.description}}
+
+**Entities:** {{join dataEntities ", "}}
+
+**Charts:** {{join charts ", "}}
+
+**Tech Stack:**
+- Next.js 14 (App Router)
+- TypeScript
+- Tailwind CSS
+- Recharts (data visualization)
+- TanStack Table (data tables)
+- React Hook Form
+- Zod validation
+
+**Features:**
+{{formatList userInput.features}}
+
+# REQUIREMENTS
+
+Create a comprehensive admin dashboard with:
+
+## Layout
+- Sidebar navigation
+- Top bar with user menu
+- Main content area
+- Responsive design
+- Collapsible sidebar on mobile
+
+## Dashboard Overview
+- Key metrics cards
+- Charts and graphs
+- Recent activity feed
+- Quick actions
+
+## Data Management
+For each entity in {{json dataEntities}}:
+- List view with data table
+- Create form
+- Edit form
+- Delete confirmation
+- Bulk actions
+- Search and filter
+- Sorting
+- Pagination
+- Export to CSV/Excel
+
+## Data Tables
+- TanStack Table implementation
+- Column sorting
+- Column filtering
+- Column visibility toggle
+- Row selection
+- Bulk actions
+- Pagination controls
+- Loading states
+- Empty states
+
+## Charts & Visualizations
+Generate {{join charts ", "}} charts:
+- Responsive sizing
+- Interactive tooltips
+- Legend
+- Color-coded data
+- Real-time updates
+- Date range filters
+
+## Forms
+- Dynamic forms for each entity
+- Field validation
+- Error messages
+- Auto-save drafts
+- File uploads
+- Rich text editor if needed
+- Multi-step forms for complex data
+
+## Authentication & Permissions
+- Protected routes
+- Role-based access control
+- Permission checks
+- Admin-only features
+
+## Real-time Updates
+- WebSocket or polling
+- Live data updates
+- Notifications
+- Activity feed
+
+## Search
+- Global search
+- Entity-specific search
+- Fuzzy matching
+- Search suggestions
+- Recent searches
+
+## Settings
+- User profile management
+- Preferences
+- API key management
+- Team management
+- Audit logs
+
+# CONSTRAINTS
+
+- Server Components for data fetching
+- Client Components for interactivity
+- Optimistic UI updates
+- Error boundaries
+- Loading states for all async operations
+- Keyboard navigation support
+- Screen reader friendly
+- Print styles
+- Mobile responsive
+
+# OUTPUT
+
+## 1. Dashboard Structure
+
+Complete component architecture
+
+## 2. Implementation
+
+Full code for:
+- Layout components
+- Page components
+- Data table components
+- Chart components
+- Form components
+- API routes
+- Database queries
+
+## 3. Data Models
+
+Prisma schema for all entities
+
+## 4. Authentication
+
+NextAuth configuration
+
+## 5. Utilities
+
+Helpers for:
+- Data formatting
+- Validation
+- Permissions
+- Exports
+
+## 6. Styling
+
+Tailwind configuration and custom styles
+```
+
+**Step 6: Create E-commerce Template (2 hours)**
+
+`apps/web/lib/prompts/templates/e-commerce.hbs`:
+```handlebars
+---
+id: e-commerce
+name: E-commerce Store
+description: Full-featured online store with cart and checkout
+category: e-commerce
+version: 1.0.0
+author: BTRMe System
+tags: [ecommerce, store, shop, cart, checkout]
+variables:
+  - name: storeName
+    type: string
+    required: true
+    description: Name of the store
+  - name: paymentProvider
+    type: string
+    required: false
+    default: stripe
+    description: Payment processing provider
+    validation:
+      enum: [stripe, paypal, square]
+  - name: shippingRequired
+    type: boolean
+    required: false
+    default: true
+    description: Whether physical shipping is required
+  - name: inventory
+    type: boolean
+    required: false
+    default: true
+    description: Track inventory
+defaultTechStack:
+  frontend:
+    framework: Next.js 14
+    styling: Tailwind CSS
+    stateManagement: Zustand
+  backend:
+    framework: Next.js API Routes
+    database: PostgreSQL
+    orm: Prisma
+  deployment:
+    platform: Vercel
+---
+
+# SYSTEM
+
+You are an expert e-commerce developer. You build secure, conversion-optimized online stores with seamless checkout experiences.
+
+# CONTEXT
+
+**Store Name:** {{storeName}}
+
+**Description:** {{userInput.description}}
+
+**Payment Provider:** {{paymentProvider}}
+
+**Shipping Required:** {{#if shippingRequired}}Yes{{else}}No{{/if}}
+
+**Inventory Tracking:** {{#if inventory}}Yes{{else}}No{{/if}}
+
+**Tech Stack:**
+- Next.js 14 (App Router)
+- TypeScript
+- Tailwind CSS
+- Zustand (state management)
+- Prisma + PostgreSQL
+{{#if_eq paymentProvider "stripe"}}
+- Stripe (payments)
+{{/if_eq}}
+{{#if_eq paymentProvider "paypal"}}
+- PayPal SDK
+{{/if_eq}}
+- Resend (email)
+
+**Features:**
+{{formatList userInput.features}}
+
+# REQUIREMENTS
+
+Create a complete e-commerce platform with:
+
+## Product Catalog
+- Product listing page
+- Product detail pages
+- Product images (multiple)
+- Product variants (size, color)
+- Product reviews
+- Product search
+- Category navigation
+- Filters (price, category, rating)
+- Sorting options
+{{#if inventory}}
+- Stock status display
+- Low stock warnings
+{{/if}}
+
+## Shopping Cart
+- Add to cart
+- Update quantity
+- Remove items
+- Cart persistence
+- Cart preview
+- Subtotal calculation
+- Tax calculation
+{{#if shippingRequired}}
+- Shipping calculation
+{{/if}}
+- Discount codes
+- Cart abandonment tracking
+
+## Checkout
+- Multi-step checkout
+- Guest checkout option
+- Shipping address
+{{#if shippingRequired}}
+- Shipping method selection
+- Shipping cost calculation
+{{/if}}
+- Payment processing
+- Order confirmation
+- Email receipts
+- Order tracking
+
+## Payment Integration
+{{#if_eq paymentProvider "stripe"}}
+- Stripe Elements
+- Card payment
+- Digital wallets (Apple Pay, Google Pay)
+- 3D Secure (SCA)
+- Webhook handling
+- Refund processing
+{{/if_eq}}
+{{#if_eq paymentProvider "paypal"}}
+- PayPal Smart Buttons
+- PayPal Checkout Flow
+- Order capture
+- Webhook handling
+{{/if_eq}}
+
+## User Account
+- Registration
+- Login
+- Order history
+- Saved addresses
+- Saved payment methods
+- Wishlist
+- Account settings
+
+## Admin Panel
+- Product management
+- Order management
+- Customer management
+- Inventory management
+- Analytics dashboard
+- Sales reports
+
+## Email Notifications
+- Order confirmation
+- Shipping updates
+- Delivery confirmation
+- Review requests
+- Abandoned cart reminders
+
+## SEO & Marketing
+- Product page SEO
+- Structured data
+- Social sharing
+- Email capture
+- Newsletter signup
+- Related products
+- Upsells and cross-sells
+
+## Security
+- PCI compliance
+- Secure checkout
+- Fraud detection
+- Rate limiting
+- CSRF protection
+- Input validation
+
+# CONSTRAINTS
+
+- Server Components for product pages
+- Client Components for cart and checkout
+- Optimistic UI for cart operations
+- Proper error handling for payments
+- Transaction safety (database transactions)
+- Handle concurrent orders
+- Prevent overselling
+- Secure payment data (never store cards)
+- GDPR compliance
+- Mobile responsive
+- Fast page loads
+
+# OUTPUT
+
+## 1. Store Structure
+
+Complete app architecture
+
+## 2. Implementation
+
+Full code for:
+- Product pages
+- Cart system
+- Checkout flow
+- Payment integration
+- Admin panel
+- Email templates
+
+## 3. Database Schema
+
+Prisma schema for:
+- Products
+- Orders
+- Customers
+- Inventory
+- Reviews
+
+## 4. Payment Setup
+
+{{paymentProvider}} configuration
+
+## 5. Testing
+
+Test cases for:
+- Cart operations
+- Checkout flow
+- Payment processing
+- Order fulfillment
+
+## 6. Deployment
+
+Production checklist:
+- Environment variables
+- Webhook endpoints
+- Email setup
+- Payment testing
+- Go-live checklist
+```
+
+**Deliverables:**
+- ✅ `lib/prompts/templates/_base.hbs` - Base template
+- ✅ `lib/prompts/templates/web-app.hbs` - Web application
+- ✅ `lib/prompts/templates/api.hbs` - REST API
+- ✅ `lib/prompts/templates/landing-page.hbs` - Landing page
+- ✅ `lib/prompts/templates/dashboard.hbs` - Admin dashboard
+- ✅ `lib/prompts/templates/e-commerce.hbs` - E-commerce store
+
+---
+
+#### Task 2.2.1.3: Create Template API and Integration (4 hours)
+
+**Implementation Steps:**
+
+**Step 1: Create Template API Routes (2 hours)**
+
+`apps/web/app/api/templates/route.ts`:
+```typescript
+import { apiHandler } from '@/lib/api/handler'
+import { promptEngine } from '@/lib/prompts/engine'
+import { z } from 'zod'
+
+const querySchema = z.object({
+  category: z.string().optional(),
+  tags: z.array(z.string()).optional(),
+})
+
+// GET /api/templates - List all templates
+export const GET = apiHandler(
+  async (req) => {
+    const url = new URL(req.url)
+    const category = url.searchParams.get('category') || undefined
+    const tags = url.searchParams.getAll('tag')
+
+    const templates = promptEngine.filterTemplates(category, tags.length > 0 ? tags : undefined)
+
+    return {
+      templates: templates.map((t) => ({
+        id: t.id,
+        name: t.name,
+        description: t.description,
+        category: t.category,
+        tags: t.tags,
+        variables: t.variables,
+      })),
+    }
+  },
+  {
+    requireAuth: true,
+  }
+)
+```
+
+`apps/web/app/api/templates/[id]/route.ts`:
+```typescript
+import { apiHandler } from '@/lib/api/handler'
+import { promptEngine } from '@/lib/prompts/engine'
+
+// GET /api/templates/:id - Get template details
+export const GET = apiHandler(
+  async (req, { params }) => {
+    const templateId = params.id
+
+    const metadata = promptEngine.getMetadata(templateId)
+
+    if (!metadata) {
+      throw new Error('Template not found')
+    }
+
+    return { template: metadata }
+  },
+  {
+    requireAuth: true,
+  }
+)
+```
+
+`apps/web/app/api/templates/compile/route.ts`:
+```typescript
+import { apiHandler } from '@/lib/api/handler'
+import { promptEngine } from '@/lib/prompts/engine'
+import { z } from 'zod'
+
+const compileSchema = z.object({
+  templateId: z.string(),
+  variables: z.record(z.unknown()).optional(),
+  techStack: z
+    .object({
+      frontend: z
+        .object({
+          framework: z.string(),
+          styling: z.string(),
+          stateManagement: z.string().optional(),
+        })
+        .optional(),
+      backend: z
+        .object({
+          framework: z.string(),
+          database: z.string(),
+          orm: z.string().optional(),
+        })
+        .optional(),
+      deployment: z
+        .object({
+          platform: z.string(),
+          ci: z.string().optional(),
+        })
+        .optional(),
+    })
+    .optional(),
+  userInput: z.object({
+    description: z.string().min(10),
+    features: z.array(z.string()),
+    preferences: z.record(z.unknown()).optional(),
+  }),
+})
+
+// POST /api/templates/compile - Compile a template
+export const POST = apiHandler(
+  async (req, { body }) => {
+    const result = promptEngine.compile(body!.templateId, {
+      variables: body!.variables || {},
+      techStack: body!.techStack || {},
+      userInput: body!.userInput,
+    })
+
+    return {
+      prompt: result.content,
+      metadata: result.metadata,
+      tokens: result.tokens,
+      sections: result.sections,
+    }
+  },
+  {
+    requireAuth: true,
+    bodySchema: compileSchema,
+  }
+)
+```
+
+**Step 2: Create Frontend Hook (1 hour)**
+
+`apps/web/hooks/use-templates.ts`:
+```typescript
+'use client'
+
+import { useState, useCallback } from 'react'
+import { api } from '@/lib/api-client'
+import type { TemplateMetadata, CompiledPrompt, TemplateContext } from '@/lib/prompts/types'
+
+export function useTemplates() {
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<Error | null>(null)
+
+  const listTemplates = useCallback(async (category?: string, tags?: string[]) => {
+    setLoading(true)
+    setError(null)
+
+    try {
+      const params = new URLSearchParams()
+      if (category) params.append('category', category)
+      if (tags) tags.forEach((tag) => params.append('tag', tag))
+
+      const result = await api.get<{ templates: TemplateMetadata[] }>(
+        `/api/templates?${params.toString()}`
+      )
+
+      return result.templates
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err))
+      setError(error)
+      throw error
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  const getTemplate = useCallback(async (templateId: string) => {
+    setLoading(true)
+    setError(null)
+
+    try {
+      const result = await api.get<{ template: TemplateMetadata }>(`/api/templates/${templateId}`)
+      return result.template
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err))
+      setError(error)
+      throw error
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  const compileTemplate = useCallback(
+    async (templateId: string, context: Omit<TemplateContext, 'techStack'> & { techStack?: any }) => {
+      setLoading(true)
+      setError(null)
+
+      try {
+        const result = await api.post<{
+          prompt: string
+          metadata: any
+          tokens: number
+          sections: any
+        }>('/api/templates/compile', {
+          templateId,
+          ...context,
+        })
+
+        return result
+      } catch (err) {
+        const error = err instanceof Error ? err : new Error(String(err))
+        setError(error)
+        throw error
+      } finally {
+        setLoading(false)
+      }
+    },
+    []
+  )
+
+  return {
+    listTemplates,
+    getTemplate,
+    compileTemplate,
+    loading,
+    error,
+  }
+}
+```
+
+**Step 3: Initialize Templates on Startup (30 minutes)**
+
+`apps/web/app/layout.tsx`:
+```typescript
+import { initializeTemplates } from '@/lib/prompts/loader'
+
+// Initialize templates when app starts
+initializeTemplates().catch((error) => {
+  console.error('Failed to initialize templates:', error)
+})
+
+export default function RootLayout({ children }: { children: React.Node }) {
+  return (
+    <html lang="en">
+      <body>{children}</body>
+    </html>
+  )
+}
+```
+
+**Step 4: Testing (30 minutes)**
+
+`apps/web/__tests__/api/templates.test.ts`:
+```typescript
+import { describe, test, expect } from 'vitest'
+import { promptEngine } from '@/lib/prompts/engine'
+import { TemplateMetadata, TemplateContext } from '@/lib/prompts/types'
+
+describe('Template API Integration', () => {
+  test('should compile web-app template', () => {
+    // Register a simple web-app template
+    const metadata: TemplateMetadata = {
+      id: 'test-web-app',
+      name: 'Test Web App',
+      description: 'Test template',
+      category: 'web-app',
+      version: '1.0.0',
+      author: 'Test',
+      tags: ['test'],
+      variables: [
+        {
+          name: 'appName',
+          type: 'string',
+          required: true,
+          description: 'App name',
+        },
+      ],
+    }
+
+    const template = `# SYSTEM
+Building {{appName}}
+
+# REQUIREMENTS
+{{userInput.description}}`
+
+    promptEngine.registerTemplate(metadata, template)
+
+    const context: TemplateContext = {
+      variables: { appName: 'TodoApp' },
+      techStack: {},
+      userInput: {
+        description: 'A todo list application',
+        features: ['Add tasks', 'Complete tasks'],
+      },
+    }
+
+    const result = promptEngine.compile('test-web-app', context)
+
+    expect(result.content).toContain('TodoApp')
+    expect(result.content).toContain('A todo list application')
+    expect(result.tokens).toBeGreaterThan(0)
+  })
+
+  test('should filter templates by category', () => {
+    const webTemplates = promptEngine.filterTemplates('web-app')
+    expect(webTemplates.length).toBeGreaterThan(0)
+    expect(webTemplates.every((t) => t.category === 'web-app')).toBe(true)
+  })
+})
+```
+
+**Deliverables:**
+- ✅ `app/api/templates/route.ts` - List templates API
+- ✅ `app/api/templates/[id]/route.ts` - Get template API
+- ✅ `app/api/templates/compile/route.ts` - Compile template API
+- ✅ `hooks/use-templates.ts` - Frontend hook
+- ✅ Template initialization on startup
+- ✅ Integration tests
+
+---
+
+### **Story 2.2.1 Summary**
+
+**Completed Tasks:**
+1. ✅ Task 2.2.1.1: Create Prompt Template Engine (8 hours)
+2. ✅ Task 2.2.1.2: Build Template Library (10 hours)
+3. ✅ Task 2.2.1.3: Create Template API and Integration (4 hours)
+
+**Total Time:** 22 hours (rounded to 24 hours = 10 SP)
+**Story Points:** 10 SP
+
+**Files Created/Modified:**
+- `lib/prompts/types.ts` - Type definitions
+- `lib/prompts/engine.ts` - Template engine core
+- `lib/prompts/loader.ts` - Template loading system
+- `lib/ai/tokens.ts` - Token counting utilities
+- `lib/prompts/templates/_base.hbs` - Base template
+- `lib/prompts/templates/web-app.hbs` - Web app template
+- `lib/prompts/templates/api.hbs` - API template
+- `lib/prompts/templates/landing-page.hbs` - Landing page template
+- `lib/prompts/templates/dashboard.hbs` - Dashboard template
+- `lib/prompts/templates/e-commerce.hbs` - E-commerce template
+- `app/api/templates/route.ts` - List templates API
+- `app/api/templates/[id]/route.ts` - Get template API
+- `app/api/templates/compile/route.ts` - Compile template API
+- `hooks/use-templates.ts` - React hook for templates
+- `lib/prompts/__tests__/engine.test.ts` - Engine tests
+- `__tests__/api/templates.test.ts` - API tests
+
+**Acceptance Criteria Met:**
+- ✅ Load prompt template for different app types
+- ✅ Customize template with variables
+- ✅ Replace placeholders with user input
+- ✅ Generate final prompt ready for AI
+- ✅ Validate template variables
+- ✅ Support multiple template categories
+- ✅ Token counting for cost estimation
+
+**Next Story:**
+→ Story 2.2.2: Context Extraction System (8 SP, 18 hours)
+
+---

@@ -9515,3 +9515,1085 @@ describe('PageHeader Accessibility', () => {
 → Story 1.3.2: Layout Components (8 SP, 18 hours)
 
 ---
+
+### Story 1.3.2: Layout Components (8 SP, 18 hours)
+
+**User Story:**
+As a **developer**, I want **reusable layout components (navbar, sidebar, footer)** so that **I can maintain consistent navigation and branding across all pages**.
+
+**Acceptance Criteria (Gherkin):**
+
+```gherkin
+Feature: Layout Components
+
+  Scenario: Responsive navbar
+    Given I am on any page
+    When I view the navbar
+    Then I see the BTRMe logo
+    And I see navigation links (Dashboard, Projects, Pricing)
+    And I see user menu (avatar, dropdown)
+    And I see theme toggle
+    And The navbar is responsive on mobile (hamburger menu)
+
+  Scenario: Collapsible sidebar
+    Given I am on the dashboard page
+    When I view the sidebar
+    Then I see navigation items with icons
+    And I can collapse/expand the sidebar
+    And The active route is highlighted
+    And The sidebar is hidden on mobile (drawer)
+
+  Scenario: Footer with links
+    Given I am on any page
+    When I scroll to the footer
+    Then I see company info (About, Contact, Privacy, Terms)
+    And I see social media links
+    And I see copyright notice
+    And All links are accessible
+
+  Scenario: DashboardLayout wrapper
+    Given I create a new dashboard page
+    When I wrap it in DashboardLayout
+    Then The page includes navbar, sidebar, and main content area
+    And The layout is responsive
+    And The sidebar state persists in localStorage
+```
+
+**Story Points:** 8 SP
+**Estimated Hours:** 18 hours
+**Priority:** High
+**Dependencies:** Story 1.3.1 (requires UI components)
+
+---
+
+#### **Task 1.3.2.1: Create Navbar Component** (3 SP, 7 hours)
+
+**Description:** Build a responsive navbar with logo, navigation links, user menu, and theme toggle that adapts to authenticated and unauthenticated states.
+
+**Steps:**
+
+##### **Step 1: Create Main Navbar Component**
+
+File: `apps/web/components/navbar.tsx`
+
+```typescript
+import Link from 'next/link'
+import { Logo } from '@/components/logo'
+import { ThemeToggle } from '@/components/theme-toggle'
+import { UserNav } from '@/components/user-nav'
+import { MobileNav } from '@/components/mobile-nav'
+import { getSession } from '@/lib/auth'
+import { Button } from '@/components/ui/button'
+
+export async function Navbar() {
+  const session = await getSession()
+
+  return (
+    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <nav className="container flex h-16 items-center justify-between">
+        {/* Logo */}
+        <Link href="/" className="flex items-center space-x-2">
+          <Logo />
+          <span className="font-bold text-xl">BTRMe</span>
+        </Link>
+
+        {/* Desktop Navigation */}
+        <div className="hidden md:flex md:items-center md:space-x-6">
+          {session ? (
+            <>
+              <Link
+                href="/dashboard"
+                className="text-sm font-medium transition-colors hover:text-primary"
+              >
+                Dashboard
+              </Link>
+              <Link
+                href="/projects"
+                className="text-sm font-medium transition-colors hover:text-primary"
+              >
+                Projects
+              </Link>
+              <Link
+                href="/pricing"
+                className="text-sm font-medium transition-colors hover:text-primary"
+              >
+                Pricing
+              </Link>
+            </>
+          ) : (
+            <>
+              <Link
+                href="/features"
+                className="text-sm font-medium transition-colors hover:text-primary"
+              >
+                Features
+              </Link>
+              <Link
+                href="/pricing"
+                className="text-sm font-medium transition-colors hover:text-primary"
+              >
+                Pricing
+              </Link>
+              <Link
+                href="/docs"
+                className="text-sm font-medium transition-colors hover:text-primary"
+              >
+                Docs
+              </Link>
+            </>
+          )}
+        </div>
+
+        {/* Right Side Actions */}
+        <div className="flex items-center space-x-4">
+          <ThemeToggle />
+
+          {session ? (
+            <UserNav user={session.user} />
+          ) : (
+            <div className="hidden md:flex md:items-center md:space-x-2">
+              <Button variant="ghost" asChild>
+                <Link href="/signin">Sign In</Link>
+              </Button>
+              <Button asChild>
+                <Link href="/signup">Get Started</Link>
+              </Button>
+            </div>
+          )}
+
+          {/* Mobile Menu Toggle */}
+          <MobileNav session={session} />
+        </div>
+      </nav>
+    </header>
+  )
+}
+```
+
+**Key Features:**
+- **Server Component:** Fetches session server-side for auth state
+- **Sticky positioning:** Navbar stays at top on scroll
+- **Backdrop blur:** Modern glassmorphism effect
+- **Conditional links:** Different nav items for authenticated/unauthenticated users
+- **Mobile responsive:** Hidden on mobile, replaced by MobileNav
+
+##### **Step 2: Create Logo Component**
+
+File: `apps/web/components/logo.tsx`
+
+```typescript
+export function Logo({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className || 'h-6 w-6'}
+    >
+      {/* Simple geometric logo - customize as needed */}
+      <path d="M12 2L2 7l10 5 10-5-10-5z" />
+      <path d="M2 17l10 5 10-5M2 12l10 5 10-5" />
+    </svg>
+  )
+}
+```
+
+##### **Step 3: Create UserNav Component**
+
+File: `apps/web/components/user-nav.tsx`
+
+```typescript
+'use client'
+
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { User, Settings, CreditCard, LogOut } from 'lucide-react'
+import { signOut } from 'next-auth/react'
+import { useRouter } from 'next/navigation'
+import type { User as UserType } from '@prisma/client'
+
+interface UserNavProps {
+  user: Pick<UserType, 'name' | 'email' | 'image'>
+}
+
+export function UserNav({ user }: UserNavProps) {
+  const router = useRouter()
+
+  const initials = user.name
+    ?.split(' ')
+    .map((n) => n[0])
+    .join('')
+    .toUpperCase() || 'U'
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" className="relative h-9 w-9 rounded-full">
+          <Avatar className="h-9 w-9">
+            <AvatarImage src={user.image || undefined} alt={user.name || 'User'} />
+            <AvatarFallback>{initials}</AvatarFallback>
+          </Avatar>
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent className="w-56" align="end" forceMount>
+        <DropdownMenuLabel className="font-normal">
+          <div className="flex flex-col space-y-1">
+            <p className="text-sm font-medium leading-none">{user.name}</p>
+            <p className="text-xs leading-none text-muted-foreground">
+              {user.email}
+            </p>
+          </div>
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuGroup>
+          <DropdownMenuItem onClick={() => router.push('/dashboard')}>
+            <User className="mr-2 h-4 w-4" />
+            <span>Dashboard</span>
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => router.push('/settings')}>
+            <Settings className="mr-2 h-4 w-4" />
+            <span>Settings</span>
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => router.push('/billing')}>
+            <CreditCard className="mr-2 h-4 w-4" />
+            <span>Billing</span>
+          </DropdownMenuItem>
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          onClick={() => signOut({ callbackUrl: '/' })}
+          className="text-destructive focus:text-destructive"
+        >
+          <LogOut className="mr-2 h-4 w-4" />
+          <span>Sign Out</span>
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+```
+
+**Key Features:**
+- **Avatar with fallback:** Shows user image or initials
+- **Dropdown menu:** Dashboard, Settings, Billing, Sign Out
+- **Client Component:** Uses `next-auth/react` for signOut
+- **Accessible:** Keyboard navigable, focus management
+
+##### **Step 4: Create MobileNav Component**
+
+File: `apps/web/components/mobile-nav.tsx`
+
+```typescript
+'use client'
+
+import { useState } from 'react'
+import Link from 'next/link'
+import { Menu, X } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
+import { Logo } from '@/components/logo'
+import { signOut } from 'next-auth/react'
+import type { Session } from 'next-auth'
+
+interface MobileNavProps {
+  session: Session | null
+}
+
+export function MobileNav({ session }: MobileNavProps) {
+  const [open, setOpen] = useState(false)
+
+  return (
+    <Sheet open={open} onOpenChange={setOpen}>
+      <SheetTrigger asChild className="md:hidden">
+        <Button variant="ghost" size="icon">
+          <Menu className="h-5 w-5" />
+          <span className="sr-only">Toggle menu</span>
+        </Button>
+      </SheetTrigger>
+      <SheetContent side="right" className="w-[300px] sm:w-[400px]">
+        <div className="flex items-center space-x-2 mb-8">
+          <Logo />
+          <span className="font-bold text-xl">BTRMe</span>
+        </div>
+
+        <nav className="flex flex-col space-y-4">
+          {session ? (
+            <>
+              <Link
+                href="/dashboard"
+                className="text-sm font-medium transition-colors hover:text-primary"
+                onClick={() => setOpen(false)}
+              >
+                Dashboard
+              </Link>
+              <Link
+                href="/projects"
+                className="text-sm font-medium transition-colors hover:text-primary"
+                onClick={() => setOpen(false)}
+              >
+                Projects
+              </Link>
+              <Link
+                href="/pricing"
+                className="text-sm font-medium transition-colors hover:text-primary"
+                onClick={() => setOpen(false)}
+              >
+                Pricing
+              </Link>
+              <Link
+                href="/settings"
+                className="text-sm font-medium transition-colors hover:text-primary"
+                onClick={() => setOpen(false)}
+              >
+                Settings
+              </Link>
+              <Link
+                href="/billing"
+                className="text-sm font-medium transition-colors hover:text-primary"
+                onClick={() => setOpen(false)}
+              >
+                Billing
+              </Link>
+              <Button
+                variant="ghost"
+                className="justify-start"
+                onClick={() => {
+                  setOpen(false)
+                  signOut({ callbackUrl: '/' })
+                }}
+              >
+                Sign Out
+              </Button>
+            </>
+          ) : (
+            <>
+              <Link
+                href="/features"
+                className="text-sm font-medium transition-colors hover:text-primary"
+                onClick={() => setOpen(false)}
+              >
+                Features
+              </Link>
+              <Link
+                href="/pricing"
+                className="text-sm font-medium transition-colors hover:text-primary"
+                onClick={() => setOpen(false)}
+              >
+                Pricing
+              </Link>
+              <Link
+                href="/docs"
+                className="text-sm font-medium transition-colors hover:text-primary"
+                onClick={() => setOpen(false)}
+              >
+                Docs
+              </Link>
+              <Button asChild className="mt-4">
+                <Link href="/signin" onClick={() => setOpen(false)}>
+                  Sign In
+                </Link>
+              </Button>
+              <Button asChild variant="outline">
+                <Link href="/signup" onClick={() => setOpen(false)}>
+                  Get Started
+                </Link>
+              </Button>
+            </>
+          )}
+        </nav>
+      </SheetContent>
+    </Sheet>
+  )
+}
+```
+
+**Key Features:**
+- **Sheet component:** Slide-in drawer from right
+- **Auto-close:** Closes on link click
+- **Conditional content:** Different links for auth state
+- **Mobile only:** Hidden on desktop (md: breakpoint)
+
+**Deliverables:**
+- ✅ `components/navbar.tsx` - Main navbar
+- ✅ `components/logo.tsx` - Logo component
+- ✅ `components/user-nav.tsx` - User dropdown menu
+- ✅ `components/mobile-nav.tsx` - Mobile navigation drawer
+- ✅ Responsive on all screen sizes
+- ✅ Auth state handled correctly
+
+**Testing:**
+```typescript
+// apps/web/__tests__/components/navbar.test.tsx
+import { render, screen } from '@testing-library/react'
+import { Navbar } from '@/components/navbar'
+
+vi.mock('@/lib/auth', () => ({
+  getSession: vi.fn().mockResolvedValue(null),
+}))
+
+describe('Navbar', () => {
+  it('renders logo and brand', async () => {
+    const navbar = await Navbar()
+    render(navbar)
+    expect(screen.getByText('BTRMe')).toBeInTheDocument()
+  })
+
+  it('shows sign in button when not authenticated', async () => {
+    const navbar = await Navbar()
+    render(navbar)
+    expect(screen.getByText('Sign In')).toBeInTheDocument()
+  })
+})
+```
+
+---
+
+#### **Task 1.3.2.2: Create Sidebar Component** (3 SP, 7 hours)
+
+**Description:** Build a collapsible sidebar with navigation items, active route highlighting, and responsive behavior (hidden on mobile, persistent on desktop).
+
+**Steps:**
+
+##### **Step 1: Create Sidebar Navigation Items Config**
+
+File: `apps/web/lib/navigation.ts`
+
+```typescript
+import {
+  LayoutDashboard,
+  FolderKanban,
+  Sparkles,
+  Settings,
+  CreditCard,
+  Users,
+  FileText,
+  type LucideIcon,
+} from 'lucide-react'
+
+export interface NavItem {
+  title: string
+  href: string
+  icon: LucideIcon
+  badge?: string
+  disabled?: boolean
+}
+
+export const dashboardNavItems: NavItem[] = [
+  {
+    title: 'Dashboard',
+    href: '/dashboard',
+    icon: LayoutDashboard,
+  },
+  {
+    title: 'Projects',
+    href: '/projects',
+    icon: FolderKanban,
+  },
+  {
+    title: 'Generate',
+    href: '/generate',
+    icon: Sparkles,
+  },
+  {
+    title: 'Templates',
+    href: '/templates',
+    icon: FileText,
+  },
+  {
+    title: 'Settings',
+    href: '/settings',
+    icon: Settings,
+  },
+  {
+    title: 'Billing',
+    href: '/billing',
+    icon: CreditCard,
+  },
+]
+
+export const adminNavItems: NavItem[] = [
+  {
+    title: 'Users',
+    href: '/admin/users',
+    icon: Users,
+  },
+]
+```
+
+##### **Step 2: Create Sidebar Component**
+
+File: `apps/web/components/sidebar.tsx`
+
+```typescript
+'use client'
+
+import Link from 'next/link'
+import { usePathname } from 'next/navigation'
+import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { dashboardNavItems, type NavItem } from '@/lib/navigation'
+import { useState, useEffect } from 'react'
+
+const SIDEBAR_COLLAPSED_KEY = 'sidebar-collapsed'
+
+export function Sidebar() {
+  const pathname = usePathname()
+  const [collapsed, setCollapsed] = useState(false)
+
+  // Load collapsed state from localStorage
+  useEffect(() => {
+    const stored = localStorage.getItem(SIDEBAR_COLLAPSED_KEY)
+    if (stored !== null) {
+      setCollapsed(stored === 'true')
+    }
+  }, [])
+
+  // Persist collapsed state
+  const toggleCollapsed = () => {
+    const newState = !collapsed
+    setCollapsed(newState)
+    localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(newState))
+  }
+
+  return (
+    <aside
+      className={cn(
+        'hidden md:flex md:flex-col border-r bg-muted/40 transition-all duration-300',
+        collapsed ? 'md:w-16' : 'md:w-64'
+      )}
+    >
+      {/* Collapse Toggle */}
+      <div className="flex items-center justify-end p-4 border-b">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={toggleCollapsed}
+          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        >
+          {collapsed ? (
+            <ChevronRight className="h-4 w-4" />
+          ) : (
+            <ChevronLeft className="h-4 w-4" />
+          )}
+        </Button>
+      </div>
+
+      {/* Navigation Items */}
+      <ScrollArea className="flex-1 px-3 py-4">
+        <nav className="flex flex-col space-y-1">
+          {dashboardNavItems.map((item) => (
+            <SidebarItem
+              key={item.href}
+              item={item}
+              isActive={pathname === item.href}
+              collapsed={collapsed}
+            />
+          ))}
+        </nav>
+      </ScrollArea>
+    </aside>
+  )
+}
+
+interface SidebarItemProps {
+  item: NavItem
+  isActive: boolean
+  collapsed: boolean
+}
+
+function SidebarItem({ item, isActive, collapsed }: SidebarItemProps) {
+  const Icon = item.icon
+
+  return (
+    <Link
+      href={item.href}
+      className={cn(
+        'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all hover:bg-accent',
+        isActive
+          ? 'bg-accent text-accent-foreground'
+          : 'text-muted-foreground hover:text-foreground',
+        item.disabled && 'pointer-events-none opacity-50',
+        collapsed && 'justify-center'
+      )}
+    >
+      <Icon className="h-4 w-4 shrink-0" />
+      {!collapsed && (
+        <>
+          <span className="flex-1">{item.title}</span>
+          {item.badge && (
+            <span className="ml-auto rounded-full bg-primary px-2 py-0.5 text-xs text-primary-foreground">
+              {item.badge}
+            </span>
+          )}
+        </>
+      )}
+    </Link>
+  )
+}
+```
+
+**Key Features:**
+- **Collapsible:** Toggle between 64px (collapsed) and 256px (expanded)
+- **State persistence:** Stores collapsed state in localStorage
+- **Active route highlighting:** Uses `usePathname` to detect current page
+- **Smooth transitions:** CSS transitions on width change
+- **Scroll area:** Long nav lists scroll without affecting layout
+- **Icon-only mode:** Shows only icons when collapsed
+- **Desktop only:** Hidden on mobile (handled by MobileNav)
+
+##### **Step 3: Install Missing UI Components**
+
+```bash
+npx shadcn-ui@latest add scroll-area
+npx shadcn-ui@latest add sheet
+```
+
+##### **Step 4: Create Mobile Sidebar Drawer**
+
+File: `apps/web/components/mobile-sidebar.tsx`
+
+```typescript
+'use client'
+
+import { useState } from 'react'
+import Link from 'next/link'
+import { usePathname } from 'next/navigation'
+import { Menu } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { cn } from '@/lib/utils'
+import { dashboardNavItems, type NavItem } from '@/lib/navigation'
+import { Logo } from '@/components/logo'
+
+export function MobileSidebar() {
+  const [open, setOpen] = useState(false)
+  const pathname = usePathname()
+
+  return (
+    <Sheet open={open} onOpenChange={setOpen}>
+      <SheetTrigger asChild className="md:hidden">
+        <Button variant="ghost" size="icon">
+          <Menu className="h-5 w-5" />
+          <span className="sr-only">Toggle sidebar</span>
+        </Button>
+      </SheetTrigger>
+      <SheetContent side="left" className="w-64 p-0">
+        <div className="flex items-center space-x-2 border-b p-4">
+          <Logo />
+          <span className="font-bold text-xl">BTRMe</span>
+        </div>
+        <ScrollArea className="h-[calc(100vh-65px)] px-3 py-4">
+          <nav className="flex flex-col space-y-1">
+            {dashboardNavItems.map((item) => {
+              const Icon = item.icon
+              const isActive = pathname === item.href
+
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => setOpen(false)}
+                  className={cn(
+                    'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all hover:bg-accent',
+                    isActive
+                      ? 'bg-accent text-accent-foreground'
+                      : 'text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  <Icon className="h-4 w-4" />
+                  <span>{item.title}</span>
+                </Link>
+              )
+            })}
+          </nav>
+        </ScrollArea>
+      </SheetContent>
+    </Sheet>
+  )
+}
+```
+
+**Deliverables:**
+- ✅ `lib/navigation.ts` - Nav items config
+- ✅ `components/sidebar.tsx` - Desktop sidebar
+- ✅ `components/mobile-sidebar.tsx` - Mobile drawer
+- ✅ Collapsed state persists in localStorage
+- ✅ Active route highlighting
+- ✅ Smooth transitions
+
+**Testing:**
+```typescript
+// apps/web/__tests__/components/sidebar.test.tsx
+import { render, screen, fireEvent } from '@testing-library/react'
+import { Sidebar } from '@/components/sidebar'
+
+vi.mock('next/navigation', () => ({
+  usePathname: () => '/dashboard',
+}))
+
+describe('Sidebar', () => {
+  it('renders navigation items', () => {
+    render(<Sidebar />)
+    expect(screen.getByText('Dashboard')).toBeInTheDocument()
+    expect(screen.getByText('Projects')).toBeInTheDocument()
+  })
+
+  it('toggles collapsed state', () => {
+    render(<Sidebar />)
+    const toggleButton = screen.getByLabelText('Collapse sidebar')
+    fireEvent.click(toggleButton)
+    expect(localStorage.getItem('sidebar-collapsed')).toBe('true')
+  })
+
+  it('highlights active route', () => {
+    render(<Sidebar />)
+    const dashboardLink = screen.getByText('Dashboard').closest('a')
+    expect(dashboardLink).toHaveClass('bg-accent')
+  })
+})
+```
+
+---
+
+#### **Task 1.3.2.3: Create Footer Component** (2 SP, 4 hours)
+
+**Description:** Build a comprehensive footer with company links, social media, and copyright notice that is accessible and SEO-friendly.
+
+**Steps:**
+
+##### **Step 1: Create Footer Component**
+
+File: `apps/web/components/footer.tsx`
+
+```typescript
+import Link from 'next/link'
+import { Logo } from '@/components/logo'
+import { Github, Twitter, Linkedin } from 'lucide-react'
+
+export function Footer() {
+  const currentYear = new Date().getFullYear()
+
+  return (
+    <footer className="border-t bg-background">
+      <div className="container py-12 md:py-16">
+        <div className="grid grid-cols-2 gap-8 md:grid-cols-4">
+          {/* Brand */}
+          <div className="col-span-2 md:col-span-1">
+            <Link href="/" className="flex items-center space-x-2 mb-4">
+              <Logo />
+              <span className="font-bold text-lg">BTRMe</span>
+            </Link>
+            <p className="text-sm text-muted-foreground">
+              Build production-ready apps with AI. No code required.
+            </p>
+          </div>
+
+          {/* Product */}
+          <div>
+            <h3 className="font-semibold mb-4">Product</h3>
+            <ul className="space-y-3 text-sm">
+              <li>
+                <Link
+                  href="/features"
+                  className="text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Features
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/pricing"
+                  className="text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Pricing
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/templates"
+                  className="text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Templates
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/roadmap"
+                  className="text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Roadmap
+                </Link>
+              </li>
+            </ul>
+          </div>
+
+          {/* Company */}
+          <div>
+            <h3 className="font-semibold mb-4">Company</h3>
+            <ul className="space-y-3 text-sm">
+              <li>
+                <Link
+                  href="/about"
+                  className="text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  About
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/blog"
+                  className="text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Blog
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/contact"
+                  className="text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Contact
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/careers"
+                  className="text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Careers
+                </Link>
+              </li>
+            </ul>
+          </div>
+
+          {/* Legal */}
+          <div>
+            <h3 className="font-semibold mb-4">Legal</h3>
+            <ul className="space-y-3 text-sm">
+              <li>
+                <Link
+                  href="/privacy"
+                  className="text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Privacy Policy
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/terms"
+                  className="text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Terms of Service
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/cookies"
+                  className="text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Cookie Policy
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/gdpr"
+                  className="text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  GDPR
+                </Link>
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        {/* Bottom Bar */}
+        <div className="mt-12 pt-8 border-t">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <p className="text-sm text-muted-foreground">
+              © {currentYear} BTRMe. All rights reserved.
+            </p>
+
+            {/* Social Links */}
+            <div className="flex items-center space-x-4">
+              <Link
+                href="https://twitter.com/btrme"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-muted-foreground hover:text-foreground transition-colors"
+                aria-label="Twitter"
+              >
+                <Twitter className="h-5 w-5" />
+              </Link>
+              <Link
+                href="https://github.com/btrme"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-muted-foreground hover:text-foreground transition-colors"
+                aria-label="GitHub"
+              >
+                <Github className="h-5 w-5" />
+              </Link>
+              <Link
+                href="https://linkedin.com/company/btrme"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-muted-foreground hover:text-foreground transition-colors"
+                aria-label="LinkedIn"
+              >
+                <Linkedin className="h-5 w-5" />
+              </Link>
+            </div>
+          </div>
+        </div>
+      </div>
+    </footer>
+  )
+}
+```
+
+**Key Features:**
+- **4-column layout:** Brand, Product, Company, Legal
+- **Responsive:** 2 columns on mobile, 4 on desktop
+- **Social links:** Twitter, GitHub, LinkedIn with aria-labels
+- **Dynamic year:** Copyright year auto-updates
+- **Hover states:** Smooth color transitions
+- **SEO-friendly:** Semantic HTML, proper link structure
+
+##### **Step 2: Create Marketing Footer (Optional Variant)**
+
+For landing page with newsletter signup:
+
+File: `apps/web/components/marketing-footer.tsx`
+
+```typescript
+import { Footer } from '@/components/footer'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
+
+export function MarketingFooter() {
+  return (
+    <>
+      {/* Newsletter Section */}
+      <section className="border-t bg-muted/50">
+        <div className="container py-12">
+          <div className="mx-auto max-w-2xl text-center">
+            <h2 className="text-2xl font-bold mb-2">Stay Updated</h2>
+            <p className="text-muted-foreground mb-6">
+              Get the latest updates on new features and templates.
+            </p>
+            <form className="flex flex-col sm:flex-row gap-2">
+              <Input
+                type="email"
+                placeholder="Enter your email"
+                className="flex-1"
+                required
+              />
+              <Button type="submit">Subscribe</Button>
+            </form>
+            <p className="text-xs text-muted-foreground mt-4">
+              We respect your privacy. Unsubscribe at any time.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <Footer />
+    </>
+  )
+}
+```
+
+**Deliverables:**
+- ✅ `components/footer.tsx` - Main footer
+- ✅ `components/marketing-footer.tsx` - Footer with newsletter
+- ✅ 4-column responsive layout
+- ✅ Social media links with accessibility
+- ✅ Dynamic copyright year
+
+**Testing:**
+```typescript
+// apps/web/__tests__/components/footer.test.tsx
+import { render, screen } from '@testing-library/react'
+import { Footer } from '@/components/footer'
+
+describe('Footer', () => {
+  it('renders brand and description', () => {
+    render(<Footer />)
+    expect(screen.getByText('BTRMe')).toBeInTheDocument()
+    expect(screen.getByText(/Build production-ready apps/i)).toBeInTheDocument()
+  })
+
+  it('renders all link sections', () => {
+    render(<Footer />)
+    expect(screen.getByText('Product')).toBeInTheDocument()
+    expect(screen.getByText('Company')).toBeInTheDocument()
+    expect(screen.getByText('Legal')).toBeInTheDocument()
+  })
+
+  it('renders current year in copyright', () => {
+    render(<Footer />)
+    const currentYear = new Date().getFullYear()
+    expect(screen.getByText(new RegExp(String(currentYear)))).toBeInTheDocument()
+  })
+
+  it('has accessible social links', () => {
+    render(<Footer />)
+    expect(screen.getByLabelText('Twitter')).toBeInTheDocument()
+    expect(screen.getByLabelText('GitHub')).toBeInTheDocument()
+    expect(screen.getByLabelText('LinkedIn')).toBeInTheDocument()
+  })
+})
+```
+
+---
+
+### **Story 1.3.2 Summary**
+
+**Completed Tasks:**
+1. ✅ Task 1.3.2.1: Create Navbar Component (7 hours)
+2. ✅ Task 1.3.2.2: Create Sidebar Component (7 hours)
+3. ✅ Task 1.3.2.3: Create Footer Component (4 hours)
+
+**Total Time:** 18 hours
+**Story Points:** 8 SP
+
+**Files Created/Modified:**
+- `apps/web/components/navbar.tsx` - Main responsive navbar
+- `apps/web/components/logo.tsx` - Logo component
+- `apps/web/components/user-nav.tsx` - User dropdown menu
+- `apps/web/components/mobile-nav.tsx` - Mobile navigation drawer
+- `apps/web/lib/navigation.ts` - Navigation items config
+- `apps/web/components/sidebar.tsx` - Desktop collapsible sidebar
+- `apps/web/components/mobile-sidebar.tsx` - Mobile sidebar drawer
+- `apps/web/components/footer.tsx` - Main footer
+- `apps/web/components/marketing-footer.tsx` - Footer with newsletter
+
+**Acceptance Criteria Met:**
+- ✅ Responsive navbar with logo, links, user menu, theme toggle
+- ✅ Mobile hamburger menu
+- ✅ Collapsible sidebar with active route highlighting
+- ✅ Sidebar state persists in localStorage
+- ✅ Mobile drawer for sidebar navigation
+- ✅ Footer with company info, social links, copyright
+- ✅ All components accessible (WCAG 2.1 AA)
+
+**Next Story:**
+→ Story 1.3.3: API Foundation (10 SP, 22 hours)
+
+---

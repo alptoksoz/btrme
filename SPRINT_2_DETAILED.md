@@ -719,3 +719,1185 @@ export function useAIStream(options: UseAIStreamOptions = {}) {
 
 ---
 
+### Story 2.1.2: Anthropic Claude Integration (6 SP, 14 hours)
+
+**User Story:**
+As a **system**, I want to **integrate with Anthropic Claude** so that **I can use it as a fallback AI provider and leverage its strengths for specific tasks**.
+
+**Acceptance Criteria (Gherkin):**
+
+```gherkin
+Feature: Anthropic Claude Integration
+
+  Scenario: Call Claude API successfully
+    Given I have a valid Anthropic API key
+    When I send a prompt to Claude
+    Then I receive a valid response
+    And Token usage is tracked
+
+  Scenario: Use Claude as fallback
+    Given OpenAI API fails
+    When The system attempts generation
+    Then Claude is used automatically
+    And The user receives a response
+```
+
+**Story Points:** 6 SP
+**Estimated Hours:** 14 hours
+**Priority:** High
+**Dependencies:** Story 2.1.1 (OpenAI integration)
+
+---
+
+#### **Task 2.1.2.1: Set Up Anthropic SDK** (3 SP, 7 hours)
+
+**Description:** Install Anthropic SDK, configure client, implement message completion functionality.
+
+**Steps:**
+
+##### **Step 1: Install Dependencies**
+
+```bash
+pnpm add @anthropic-ai/sdk
+```
+
+##### **Step 2: Create Anthropic Client**
+
+File: `apps/web/lib/ai/anthropic-client.ts`
+
+```typescript
+import Anthropic from '@anthropic-ai/sdk'
+
+if (!process.env.ANTHROPIC_API_KEY) {
+  throw new Error('ANTHROPIC_API_KEY is not set')
+}
+
+export const anthropic = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY,
+})
+
+// Token pricing (per 1M tokens)
+export const CLAUDE_PRICING = {
+  'claude-3-5-sonnet-20241022': {
+    input: 3.0,
+    output: 15.0,
+  },
+  'claude-3-opus-20240229': {
+    input: 15.0,
+    output: 75.0,
+  },
+  'claude-3-sonnet-20240229': {
+    input: 3.0,
+    output: 15.0,
+  },
+  'claude-3-haiku-20240307': {
+    input: 0.25,
+    output: 1.25,
+  },
+} as const
+
+export type ClaudeModel = keyof typeof CLAUDE_PRICING
+
+export function calculateClaudeCost(
+  model: ClaudeModel,
+  inputTokens: number,
+  outputTokens: number
+): number {
+  const pricing = CLAUDE_PRICING[model]
+  const inputCost = (inputTokens / 1_000_000) * pricing.input
+  const outputCost = (outputTokens / 1_000_000) * pricing.output
+  return inputCost + outputCost
+}
+```
+
+##### **Step 3: Create Claude Service**
+
+File: `apps/web/lib/ai/claude-service.ts`
+
+```typescript
+import { anthropic, calculateClaudeCost, type ClaudeModel } from './anthropic-client'
+import type { MessageParam } from '@anthropic-ai/sdk/resources/messages'
+
+export interface ClaudeCompletionOptions {
+  model?: ClaudeModel
+  temperature?: number
+  maxTokens?: number
+}
+
+export interface ClaudeCompletionResult {
+  content: string
+  usage: {
+    inputTokens: number
+    outputTokens: number
+    totalTokens: number
+  }
+  cost: number
+  model: string
+}
+
+export async function claudeCompletion(
+  messages: MessageParam[],
+  options: ClaudeCompletionOptions = {}
+): Promise<ClaudeCompletionResult> {
+  const {
+    model = 'claude-3-5-sonnet-20241022',
+    temperature = 0.7,
+    maxTokens = 4096,
+  } = options
+
+  try {
+    const response = await anthropic.messages.create({
+      model,
+      max_tokens: maxTokens,
+      temperature,
+      messages,
+    })
+
+    const content = response.content
+      .filter((block) => block.type === 'text')
+      .map((block) => (block as any).text)
+      .join('')
+
+    const usage = response.usage
+
+    return {
+      content,
+      usage: {
+        inputTokens: usage.input_tokens,
+        outputTokens: usage.output_tokens,
+        totalTokens: usage.input_tokens + usage.output_tokens,
+      },
+      cost: calculateClaudeCost(model, usage.input_tokens, usage.output_tokens),
+      model: response.model,
+    }
+  } catch (error) {
+    console.error('Claude API error:', error)
+    throw new Error(
+      error instanceof Error ? error.message : 'Failed to call Claude API'
+    )
+  }
+}
+
+export async function* claudeCompletionStream(
+  messages: MessageParam[],
+  options: ClaudeCompletionOptions = {}
+): AsyncGenerator<string, ClaudeCompletionResult, undefined> {
+  const {
+    model = 'claude-3-5-sonnet-20241022',
+    temperature = 0.7,
+    maxTokens = 4096,
+  } = options
+
+  try {
+    const stream = await anthropic.messages.create({
+      model,
+      max_tokens: maxTokens,
+      temperature,
+      messages,
+      stream: true,
+    })
+
+    let content = ''
+    let inputTokens = 0
+    let outputTokens = 0
+
+    for await (const event of stream) {
+      if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+        const text = event.delta.text
+        content += text
+        yield text
+      }
+
+      if (event.type === 'message_start') {
+        inputTokens = event.message.usage.input_tokens
+      }
+
+      if (event.type === 'message_delta') {
+        outputTokens = event.usage.output_tokens
+      }
+    }
+
+    return {
+      content,
+      usage: {
+        inputTokens,
+        outputTokens,
+        totalTokens: inputTokens + outputTokens,
+      },
+      cost: calculateClaudeCost(model, inputTokens, outputTokens),
+      model,
+    }
+  } catch (error) {
+    console.error('Claude streaming error:', error)
+    throw new Error(
+      error instanceof Error ? error.message : 'Failed to stream from Claude'
+    )
+  }
+}
+```
+
+##### **Step 4: Update Environment Variables**
+
+Update `.env.example`:
+
+```bash
+# Anthropic
+ANTHROPIC_API_KEY=sk-ant-...
+
+# AI Provider Priority
+AI_PRIMARY_PROVIDER=openai
+AI_FALLBACK_PROVIDER=anthropic
+```
+
+**Deliverables:**
+- ✅ `lib/ai/anthropic-client.ts` - Anthropic client
+- ✅ `lib/ai/claude-service.ts` - Claude completion service
+- ✅ Token counting and cost calculation
+- ✅ Streaming support
+
+---
+
+#### **Task 2.1.2.2: Implement Provider Abstraction** (3 SP, 7 hours)
+
+**Description:** Create a unified AI service that abstracts OpenAI and Claude, with automatic fallback.
+
+**Steps:**
+
+##### **Step 1: Create AI Provider Interface**
+
+File: `apps/web/lib/ai/types.ts`
+
+```typescript
+export type AIProvider = 'openai' | 'anthropic'
+
+export interface AIMessage {
+  role: 'system' | 'user' | 'assistant'
+  content: string
+}
+
+export interface AICompletionOptions {
+  provider?: AIProvider
+  model?: string
+  temperature?: number
+  maxTokens?: number
+  stream?: boolean
+}
+
+export interface AICompletionResult {
+  content: string
+  usage: {
+    inputTokens: number
+    outputTokens: number
+    totalTokens: number
+  }
+  cost: number
+  model: string
+  provider: AIProvider
+}
+```
+
+##### **Step 2: Create Unified AI Service**
+
+File: `apps/web/lib/ai/service.ts`
+
+```typescript
+import { chatCompletionWithRetry, chatCompletionStream } from './openai-service'
+import { claudeCompletion, claudeCompletionStream } from './claude-service'
+import { retryWithBackoff } from './retry'
+import type {
+  AIProvider,
+  AIMessage,
+  AICompletionOptions,
+  AICompletionResult,
+} from './types'
+
+// Convert messages to OpenAI format
+function toOpenAIMessages(messages: AIMessage[]) {
+  return messages.map((msg) => ({
+    role: msg.role,
+    content: msg.content,
+  }))
+}
+
+// Convert messages to Claude format
+function toClaudeMessages(messages: AIMessage[]) {
+  // Claude requires alternating user/assistant messages
+  // System messages go in the system parameter
+  const systemMessages = messages.filter((m) => m.role === 'system')
+  const conversationMessages = messages.filter((m) => m.role !== 'system')
+
+  return {
+    system: systemMessages.map((m) => m.content).join('\n\n'),
+    messages: conversationMessages.map((msg) => ({
+      role: msg.role as 'user' | 'assistant',
+      content: msg.content,
+    })),
+  }
+}
+
+export async function generateCompletion(
+  messages: AIMessage[],
+  options: AICompletionOptions = {}
+): Promise<AICompletionResult> {
+  const primaryProvider = (options.provider ||
+    process.env.AI_PRIMARY_PROVIDER ||
+    'openai') as AIProvider
+
+  const fallbackProvider = (process.env.AI_FALLBACK_PROVIDER ||
+    'anthropic') as AIProvider
+
+  try {
+    return await generateWithProvider(messages, primaryProvider, options)
+  } catch (error) {
+    console.warn(`Primary provider (${primaryProvider}) failed, trying fallback...`)
+
+    try {
+      return await generateWithProvider(messages, fallbackProvider, options)
+    } catch (fallbackError) {
+      console.error('Both providers failed:', error, fallbackError)
+      throw new Error('All AI providers failed. Please try again later.')
+    }
+  }
+}
+
+async function generateWithProvider(
+  messages: AIMessage[],
+  provider: AIProvider,
+  options: AICompletionOptions
+): Promise<AICompletionResult> {
+  if (provider === 'openai') {
+    const result = await chatCompletionWithRetry(toOpenAIMessages(messages), {
+      model: options.model as any,
+      temperature: options.temperature,
+      maxTokens: options.maxTokens,
+    })
+
+    return {
+      ...result,
+      provider: 'openai',
+      usage: {
+        inputTokens: result.usage.promptTokens,
+        outputTokens: result.usage.completionTokens,
+        totalTokens: result.usage.totalTokens,
+      },
+    }
+  } else {
+    const { system, messages: claudeMessages } = toClaudeMessages(messages)
+
+    // Add system message as first user message if present
+    const finalMessages = system
+      ? [
+          { role: 'user' as const, content: system },
+          ...claudeMessages,
+        ]
+      : claudeMessages
+
+    const result = await claudeCompletion(finalMessages, {
+      model: options.model as any,
+      temperature: options.temperature,
+      maxTokens: options.maxTokens,
+    })
+
+    return {
+      ...result,
+      provider: 'anthropic',
+    }
+  }
+}
+
+export async function* generateCompletionStream(
+  messages: AIMessage[],
+  options: AICompletionOptions = {}
+): AsyncGenerator<string, AICompletionResult, undefined> {
+  const provider = (options.provider ||
+    process.env.AI_PRIMARY_PROVIDER ||
+    'openai') as AIProvider
+
+  if (provider === 'openai') {
+    const generator = chatCompletionStream(toOpenAIMessages(messages), {
+      model: options.model as any,
+      temperature: options.temperature,
+      maxTokens: options.maxTokens,
+    })
+
+    for await (const chunk of generator) {
+      yield chunk
+    }
+
+    const result = await generator.return()
+    return {
+      ...result.value,
+      provider: 'openai',
+      usage: {
+        inputTokens: result.value.usage.promptTokens,
+        outputTokens: result.value.usage.completionTokens,
+        totalTokens: result.value.usage.totalTokens,
+      },
+    }
+  } else {
+    const { system, messages: claudeMessages } = toClaudeMessages(messages)
+
+    const finalMessages = system
+      ? [
+          { role: 'user' as const, content: system },
+          ...claudeMessages,
+        ]
+      : claudeMessages
+
+    const generator = claudeCompletionStream(finalMessages, {
+      model: options.model as any,
+      temperature: options.temperature,
+      maxTokens: options.maxTokens,
+    })
+
+    for await (const chunk of generator) {
+      yield chunk
+    }
+
+    const result = await generator.return()
+    return {
+      ...result.value,
+      provider: 'anthropic',
+    }
+  }
+}
+```
+
+##### **Step 3: Update API Routes**
+
+Update `apps/web/app/api/ai/chat/route.ts`:
+
+```typescript
+import { apiHandler } from '@/lib/api/handler'
+import { z } from 'zod'
+import { generateCompletion } from '@/lib/ai/service'
+import { prisma } from '@/lib/db'
+
+const chatSchema = z.object({
+  messages: z.array(
+    z.object({
+      role: z.enum(['system', 'user', 'assistant']),
+      content: z.string(),
+    })
+  ),
+  provider: z.enum(['openai', 'anthropic']).optional(),
+  model: z.string().optional(),
+  temperature: z.number().min(0).max(2).optional(),
+})
+
+export const POST = apiHandler(
+  async (req, { body, userId }) => {
+    const result = await generateCompletion(body!.messages, {
+      provider: body!.provider,
+      model: body!.model,
+      temperature: body!.temperature,
+    })
+
+    // Log AI usage
+    await prisma.aiUsage.create({
+      data: {
+        userId: userId!,
+        provider: result.provider,
+        model: result.model,
+        inputTokens: result.usage.inputTokens,
+        outputTokens: result.usage.outputTokens,
+        totalTokens: result.usage.totalTokens,
+        cost: result.cost,
+      },
+    })
+
+    return result
+  },
+  {
+    requireAuth: true,
+    bodySchema: chatSchema,
+    rateLimit: 'generation',
+  }
+)
+```
+
+**Deliverables:**
+- ✅ `lib/ai/types.ts` - AI provider interfaces
+- ✅ `lib/ai/service.ts` - Unified AI service
+- ✅ Automatic fallback between providers
+- ✅ Provider abstraction for easy switching
+- ✅ Updated API routes
+
+**Testing:**
+
+```typescript
+// apps/web/__tests__/ai/service.test.ts
+import { describe, it, expect, vi } from 'vitest'
+import { generateCompletion } from '@/lib/ai/service'
+
+describe('AI Service', () => {
+  it('uses OpenAI as primary provider', async () => {
+    const result = await generateCompletion([
+      { role: 'user', content: 'Hello' },
+    ])
+
+    expect(result.provider).toBe('openai')
+    expect(result.content).toBeDefined()
+  })
+
+  it('falls back to Claude on OpenAI failure', async () => {
+    // Mock OpenAI to fail
+    vi.mock('@/lib/ai/openai-service', () => ({
+      chatCompletionWithRetry: vi.fn().mockRejectedValue(new Error('OpenAI failed')),
+    }))
+
+    const result = await generateCompletion([
+      { role: 'user', content: 'Hello' },
+    ])
+
+    expect(result.provider).toBe('anthropic')
+  })
+})
+```
+
+---
+
+### **Story 2.1.2 Summary**
+
+**Completed Tasks:**
+1. ✅ Task 2.1.2.1: Set Up Anthropic SDK (7 hours)
+2. ✅ Task 2.1.2.2: Implement Provider Abstraction (7 hours)
+
+**Total Time:** 14 hours
+**Story Points:** 6 SP
+
+**Files Created/Modified:**
+- `lib/ai/anthropic-client.ts` - Anthropic client
+- `lib/ai/claude-service.ts` - Claude completion service
+- `lib/ai/types.ts` - AI provider interfaces
+- `lib/ai/service.ts` - Unified AI service with fallback
+- `app/api/ai/chat/route.ts` - Updated with provider support
+
+**Acceptance Criteria Met:**
+- ✅ Claude API integration
+- ✅ Token tracking and cost calculation
+- ✅ Automatic fallback from OpenAI to Claude
+- ✅ Provider abstraction layer
+- ✅ Streaming support for both providers
+
+**Next Story:**
+→ Story 2.1.3: Token Management & Cost Tracking (6 SP, 16 hours)
+
+---
+
+### Story 2.1.3: Token Management & Cost Tracking (6 SP, 16 hours)
+
+**User Story:**
+As a **platform owner**, I want to **track AI token usage and costs** so that **I can monitor expenses and optimize spending**.
+
+**Acceptance Criteria (Gherkin):**
+
+```gherkin
+Feature: Token Management & Cost Tracking
+
+  Scenario: Track token usage per user
+    Given A user makes an AI request
+    When The request completes
+    Then Token usage is logged to database
+    And Cost is calculated and stored
+    And User's tier limits are checked
+
+  Scenario: Generate cost reports
+    Given I am an admin
+    When I view the cost dashboard
+    Then I see total costs by provider
+    And I see costs per user
+    And I see trends over time
+
+  Scenario: Alert on high costs
+    Given Daily costs exceed threshold
+    When The system checks costs
+    Then An alert is sent to admins
+    And High-usage users are flagged
+```
+
+**Story Points:** 6 SP
+**Estimated Hours:** 16 hours
+**Priority:** High
+**Dependencies:** Stories 2.1.1, 2.1.2
+
+---
+
+#### **Task 2.1.3.1: Create Usage Tracking System** (3 SP, 8 hours)
+
+**Description:** Implement comprehensive token usage and cost tracking in the database.
+
+**Steps:**
+
+##### **Step 1: Update Prisma Schema**
+
+Add to `prisma/schema.prisma`:
+
+```prisma
+model AiUsage {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  provider  String   // 'openai' | 'anthropic'
+  model     String
+
+  inputTokens     Int
+  outputTokens    Int
+  totalTokens     Int
+  cost            Float
+
+  projectId       String?
+  project         Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  generationId    String?
+  generation      Generation? @relation(fields: [generationId], references: [id], onDelete: SetNull)
+
+  metadata        Json?
+
+  @@index([userId, createdAt])
+  @@index([projectId])
+  @@index([createdAt])
+  @@map("ai_usage")
+}
+
+model CostAlert {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+
+  type        String   // 'daily_threshold' | 'user_threshold' | 'project_threshold'
+  threshold   Float
+  actualCost  Float
+
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  projectId   String?
+  project     Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  resolved    Boolean  @default(false)
+  resolvedAt  DateTime?
+
+  @@index([resolved, createdAt])
+  @@map("cost_alerts")
+}
+```
+
+Run migration:
+
+```bash
+npx prisma migrate dev --name add_ai_usage_tracking
+```
+
+##### **Step 2: Create Usage Tracking Service**
+
+File: `apps/web/lib/ai/usage-tracking.ts`
+
+```typescript
+import { prisma } from '@/lib/db'
+import type { AICompletionResult } from './types'
+
+export interface TrackUsageOptions {
+  userId: string
+  result: AICompletionResult
+  projectId?: string
+  generationId?: string
+  metadata?: Record<string, any>
+}
+
+export async function trackAIUsage(options: TrackUsageOptions): Promise<void> {
+  const { userId, result, projectId, generationId, metadata } = options
+
+  await prisma.aiUsage.create({
+    data: {
+      userId,
+      provider: result.provider,
+      model: result.model,
+      inputTokens: result.usage.inputTokens,
+      outputTokens: result.usage.outputTokens,
+      totalTokens: result.usage.totalTokens,
+      cost: result.cost,
+      projectId,
+      generationId,
+      metadata,
+    },
+  })
+
+  // Check if we need to create alerts
+  await checkCostThresholds(userId, projectId)
+}
+
+async function checkCostThresholds(
+  userId: string,
+  projectId?: string
+): Promise<void> {
+  // Check daily user spending
+  const dailyCost = await getDailyCost(userId)
+  const userThreshold = 50 // $50 per day per user
+
+  if (dailyCost > userThreshold) {
+    await createCostAlert({
+      type: 'user_threshold',
+      userId,
+      threshold: userThreshold,
+      actualCost: dailyCost,
+    })
+  }
+
+  // Check project spending if applicable
+  if (projectId) {
+    const projectCost = await getProjectCost(projectId)
+    const projectThreshold = 100 // $100 per project
+
+    if (projectCost > projectThreshold) {
+      await createCostAlert({
+        type: 'project_threshold',
+        projectId,
+        threshold: projectThreshold,
+        actualCost: projectCost,
+      })
+    }
+  }
+}
+
+async function createCostAlert(data: {
+  type: string
+  threshold: number
+  actualCost: number
+  userId?: string
+  projectId?: string
+}): Promise<void> {
+  // Check if alert already exists
+  const existing = await prisma.costAlert.findFirst({
+    where: {
+      type: data.type,
+      userId: data.userId,
+      projectId: data.projectId,
+      resolved: false,
+    },
+  })
+
+  if (!existing) {
+    await prisma.costAlert.create({
+      data,
+    })
+
+    // TODO: Send notification to admins
+    console.warn('Cost alert created:', data)
+  }
+}
+
+export async function getDailyCost(userId: string): Promise<number> {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  const result = await prisma.aiUsage.aggregate({
+    where: {
+      userId,
+      createdAt: {
+        gte: today,
+      },
+    },
+    _sum: {
+      cost: true,
+    },
+  })
+
+  return result._sum.cost || 0
+}
+
+export async function getProjectCost(projectId: string): Promise<number> {
+  const result = await prisma.aiUsage.aggregate({
+    where: {
+      projectId,
+    },
+    _sum: {
+      cost: true,
+    },
+  })
+
+  return result._sum.cost || 0
+}
+
+export async function getTotalCost(
+  startDate?: Date,
+  endDate?: Date
+): Promise<number> {
+  const result = await prisma.aiUsage.aggregate({
+    where: {
+      createdAt: {
+        gte: startDate,
+        lte: endDate,
+      },
+    },
+    _sum: {
+      cost: true,
+    },
+  })
+
+  return result._sum.cost || 0
+}
+```
+
+##### **Step 3: Update AI Service to Track Usage**
+
+Update `apps/web/lib/ai/service.ts`:
+
+```typescript
+import { trackAIUsage } from './usage-tracking'
+
+export async function generateCompletionWithTracking(
+  messages: AIMessage[],
+  options: AICompletionOptions & {
+    userId: string
+    projectId?: string
+    generationId?: string
+  }
+): Promise<AICompletionResult> {
+  const result = await generateCompletion(messages, options)
+
+  // Track usage asynchronously
+  trackAIUsage({
+    userId: options.userId,
+    result,
+    projectId: options.projectId,
+    generationId: options.generationId,
+  }).catch((error) => {
+    console.error('Failed to track AI usage:', error)
+  })
+
+  return result
+}
+```
+
+**Deliverables:**
+- ✅ Updated Prisma schema with `AiUsage` and `CostAlert` models
+- ✅ `lib/ai/usage-tracking.ts` - Usage tracking service
+- ✅ Automatic cost threshold alerts
+- ✅ Usage aggregation functions
+
+---
+
+#### **Task 2.1.3.2: Create Cost Dashboard** (3 SP, 8 hours)
+
+**Description:** Build admin dashboard to visualize AI costs and usage.
+
+**Steps:**
+
+##### **Step 1: Create Analytics API**
+
+File: `apps/web/app/api/admin/ai-usage/route.ts`
+
+```typescript
+import { apiHandler } from '@/lib/api/handler'
+import { prisma } from '@/lib/db'
+import { z } from 'zod'
+
+const querySchema = z.object({
+  startDate: z.string().optional(),
+  endDate: z.string().optional(),
+  groupBy: z.enum(['day', 'user', 'provider', 'model']).optional(),
+})
+
+export const GET = apiHandler(
+  async (req, { userId }) => {
+    // Check if user is admin
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true },
+    })
+
+    if (user?.role !== 'ADMIN') {
+      throw new Error('Forbidden')
+    }
+
+    const url = new URL(req.url)
+    const startDate = url.searchParams.get('startDate')
+      ? new Date(url.searchParams.get('startDate')!)
+      : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) // Last 30 days
+
+    const endDate = url.searchParams.get('endDate')
+      ? new Date(url.searchParams.get('endDate')!)
+      : new Date()
+
+    const groupBy = (url.searchParams.get('groupBy') as any) || 'day'
+
+    // Get total usage
+    const totalUsage = await prisma.aiUsage.aggregate({
+      where: {
+        createdAt: {
+          gte: startDate,
+          lte: endDate,
+        },
+      },
+      _sum: {
+        totalTokens: true,
+        cost: true,
+      },
+      _count: true,
+    })
+
+    // Get usage by provider
+    const byProvider = await prisma.aiUsage.groupBy({
+      by: ['provider'],
+      where: {
+        createdAt: {
+          gte: startDate,
+          lte: endDate,
+        },
+      },
+      _sum: {
+        totalTokens: true,
+        cost: true,
+      },
+      _count: true,
+    })
+
+    // Get top users by cost
+    const topUsers = await prisma.aiUsage.groupBy({
+      by: ['userId'],
+      where: {
+        createdAt: {
+          gte: startDate,
+          lte: endDate,
+        },
+      },
+      _sum: {
+        cost: true,
+        totalTokens: true,
+      },
+      orderBy: {
+        _sum: {
+          cost: 'desc',
+        },
+      },
+      take: 10,
+    })
+
+    // Get daily costs
+    const dailyCosts = await prisma.$queryRaw`
+      SELECT
+        DATE(created_at) as date,
+        SUM(cost) as total_cost,
+        SUM(total_tokens) as total_tokens,
+        COUNT(*) as request_count
+      FROM ai_usage
+      WHERE created_at >= ${startDate}
+        AND created_at <= ${endDate}
+      GROUP BY DATE(created_at)
+      ORDER BY date ASC
+    `
+
+    return {
+      summary: {
+        totalCost: totalUsage._sum.cost || 0,
+        totalTokens: totalUsage._sum.totalTokens || 0,
+        totalRequests: totalUsage._count,
+      },
+      byProvider,
+      topUsers,
+      dailyCosts,
+    }
+  },
+  {
+    requireAuth: true,
+  }
+)
+```
+
+##### **Step 2: Create Cost Dashboard Page**
+
+File: `apps/web/app/admin/ai-usage/page.tsx`
+
+```typescript
+'use client'
+
+import { useEffect, useState } from 'react'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { api } from '@/lib/api-client'
+import { LoadingSpinner } from '@/components/loading-spinner'
+
+interface UsageData {
+  summary: {
+    totalCost: number
+    totalTokens: number
+    totalRequests: number
+  }
+  byProvider: Array<{
+    provider: string
+    _sum: { cost: number; totalTokens: number }
+    _count: number
+  }>
+  topUsers: Array<{
+    userId: string
+    _sum: { cost: number; totalTokens: number }
+  }>
+  dailyCosts: Array<{
+    date: string
+    total_cost: number
+    total_tokens: number
+    request_count: number
+  }>
+}
+
+export default function AIUsagePage() {
+  const [data, setData] = useState<UsageData | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    loadData()
+  }, [])
+
+  async function loadData() {
+    try {
+      const result = await api.get<UsageData>('/api/admin/ai-usage')
+      setData(result)
+    } catch (error) {
+      console.error('Failed to load usage data:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (loading) {
+    return <LoadingSpinner label="Loading usage data..." />
+  }
+
+  if (!data) {
+    return <div>Failed to load data</div>
+  }
+
+  return (
+    <div className="space-y-8">
+      <h1 className="text-3xl font-bold">AI Usage & Costs</h1>
+
+      {/* Summary Cards */}
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card>
+          <CardHeader>
+            <CardTitle>Total Cost</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-3xl font-bold">
+              ${data.summary.totalCost.toFixed(2)}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Total Tokens</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-3xl font-bold">
+              {data.summary.totalTokens.toLocaleString()}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Total Requests</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-3xl font-bold">
+              {data.summary.totalRequests.toLocaleString()}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* By Provider */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Usage by Provider</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {data.byProvider.map((provider) => (
+              <div key={provider.provider} className="flex justify-between">
+                <span className="font-medium">{provider.provider}</span>
+                <span>${provider._sum.cost?.toFixed(2) || 0}</span>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Top Users */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Top 10 Users by Cost</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {data.topUsers.map((user, index) => (
+              <div key={user.userId} className="flex justify-between">
+                <span>#{index + 1} {user.userId.slice(0, 8)}...</span>
+                <span>${user._sum.cost?.toFixed(2) || 0}</span>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+```
+
+**Deliverables:**
+- ✅ `app/api/admin/ai-usage/route.ts` - Analytics API
+- ✅ `app/admin/ai-usage/page.tsx` - Cost dashboard
+- ✅ Summary cards (total cost, tokens, requests)
+- ✅ Provider breakdown
+- ✅ Top users by cost
+
+---
+
+### **Story 2.1.3 Summary**
+
+**Completed Tasks:**
+1. ✅ Task 2.1.3.1: Create Usage Tracking System (8 hours)
+2. ✅ Task 2.1.3.2: Create Cost Dashboard (8 hours)
+
+**Total Time:** 16 hours
+**Story Points:** 6 SP
+
+**Files Created/Modified:**
+- Updated `prisma/schema.prisma` with AiUsage and CostAlert models
+- `lib/ai/usage-tracking.ts` - Usage tracking service
+- `lib/ai/service.ts` - Updated with tracking
+- `app/api/admin/ai-usage/route.ts` - Analytics API
+- `app/admin/ai-usage/page.tsx` - Cost dashboard
+
+**Acceptance Criteria Met:**
+- ✅ Token usage tracked per user
+- ✅ Cost calculated and stored
+- ✅ Cost reports and analytics
+- ✅ Alerts on high costs
+- ✅ Admin dashboard for monitoring
+
+---
+
+## Epic 2.1 Complete! (20 SP, 48 hours)
+
+**Epic 2.1 Summary:**
+- ✅ Story 2.1.1: OpenAI Integration (8 SP, 18h)
+- ✅ Story 2.1.2: Anthropic Claude Integration (6 SP, 14h)
+- ✅ Story 2.1.3: Token Management & Cost Tracking (6 SP, 16h)
+
+**Total Epic Points:** 20 SP
+**Total Epic Hours:** 48 hours
+
+**Sprint 2 Progress:** 20/85 SP complete (23.5%)
+
+**Remaining in Sprint 2:**
+- Epic 2.2: Prompt Engineering System (25 SP)
+- Epic 2.3: Code Generation Pipeline (20 SP)
+- Epic 2.4: Template System (10 SP)
+- Epic 2.5: Validation & Testing (10 SP)
+
+---
+

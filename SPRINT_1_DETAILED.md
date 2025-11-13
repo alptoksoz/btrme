@@ -8299,3 +8299,1219 @@ pnpm --filter web dev
 → Epic 1.3: UI Foundation (26 SP, 58 hours)
 
 ---
+
+## Epic 1.3: UI Foundation (26 SP, 58 hours)
+
+**Epic Goal:** Establish a comprehensive, accessible, and maintainable UI component library and API foundation that enables rapid feature development with consistent design and robust error handling.
+
+**Success Criteria:**
+- ✅ Complete shadcn/ui component library installed and configured
+- ✅ Design system implemented with Tailwind CSS (colors, typography, spacing)
+- ✅ Dark mode support with smooth transitions
+- ✅ All components WCAG 2.1 AA compliant
+- ✅ Layout components (navbar, sidebar, footer) responsive on all devices
+- ✅ API foundation (tRPC or REST) with type-safe endpoints
+- ✅ Global error handling and validation
+- ✅ Component documentation and Storybook (optional)
+
+**Dependencies:**
+- Requires: Epic 1.1 (monorepo setup, Tailwind configured)
+- Blocks: Epic 1.4 (landing page needs UI components)
+- Blocks: Sprint 2 (AI features need API foundation)
+
+---
+
+### Story 1.3.1: UI Component Library (8 SP, 18 hours)
+
+**User Story:**
+As a **developer**, I want a **comprehensive UI component library** so that **I can build consistent, accessible interfaces quickly without reinventing common patterns**.
+
+**Acceptance Criteria (Gherkin):**
+
+```gherkin
+Feature: UI Component Library
+
+  Scenario: shadcn/ui components installed
+    Given I am in the web app directory
+    When I run the shadcn/ui CLI to add components
+    Then Button, Input, Card, Badge, Dialog, Dropdown, Tabs, Toast, Form components are available
+    And All components use Tailwind CSS utility classes
+    And Components are typed with TypeScript
+
+  Scenario: Design tokens configured
+    Given I have a Tailwind config file
+    When I define color, typography, and spacing tokens
+    Then The design system is consistent across all components
+    And Dark mode variants are available for all colors
+    And Custom CSS variables are set in globals.css
+
+  Scenario: Components are accessible
+    Given I have a Button component
+    When I test with axe-core and keyboard navigation
+    Then The component meets WCAG 2.1 AA standards
+    And Focus indicators are visible
+    And ARIA attributes are correctly set
+
+  Scenario: Dark mode toggle
+    Given I have the dark mode provider configured
+    When I click the theme toggle button
+    Then The UI switches between light and dark themes
+    And The preference persists in localStorage
+    And No flash of unstyled content occurs
+```
+
+**Story Points:** 8 SP
+**Estimated Hours:** 18 hours
+**Priority:** High
+**Dependencies:** None (can start immediately)
+
+---
+
+#### **Task 1.3.1.1: Install and Configure shadcn/ui** (3 SP, 7 hours)
+
+**Description:** Set up shadcn/ui CLI, install core components, configure Tailwind with design tokens, and set up dark mode provider.
+
+**Steps:**
+
+##### **Step 1: Initialize shadcn/ui**
+
+Install shadcn/ui CLI and initialize in the web app:
+
+```bash
+cd apps/web
+npx shadcn-ui@latest init
+```
+
+Configuration prompts (answers):
+- **Style:** Default
+- **Base color:** Slate
+- **CSS variables:** Yes
+- **Tailwind config:** Yes (apps/web/tailwind.config.ts)
+- **Components directory:** apps/web/components/ui
+- **Utils directory:** apps/web/lib
+- **React Server Components:** Yes
+- **Write to components.json:** Yes
+
+This creates `apps/web/components.json`:
+
+```json
+{
+  "$schema": "https://ui.shadcn.com/schema.json",
+  "style": "default",
+  "rsc": true,
+  "tsx": true,
+  "tailwind": {
+    "config": "tailwind.config.ts",
+    "css": "app/globals.css",
+    "baseColor": "slate",
+    "cssVariables": true,
+    "prefix": ""
+  },
+  "aliases": {
+    "components": "@/components",
+    "utils": "@/lib/utils",
+    "ui": "@/components/ui"
+  }
+}
+```
+
+##### **Step 2: Install Core Components**
+
+Add essential components via CLI:
+
+```bash
+# Core interactive components
+npx shadcn-ui@latest add button
+npx shadcn-ui@latest add input
+npx shadcn-ui@latest add label
+npx shadcn-ui@latest add card
+npx shadcn-ui@latest add badge
+npx shadcn-ui@latest add separator
+npx shadcn-ui@latest add avatar
+npx shadcn-ui@latest add dropdown-menu
+npx shadcn-ui@latest add dialog
+npx shadcn-ui@latest add tabs
+npx shadcn-ui@latest add toast
+npx shadcn-ui@latest add form
+npx shadcn-ui@latest add select
+npx shadcn-ui@latest add textarea
+npx shadcn-ui@latest add skeleton
+npx shadcn-ui@latest add alert
+npx shadcn-ui@latest add alert-dialog
+npx shadcn-ui@latest add popover
+npx shadcn-ui@latest add tooltip
+npx shadcn-ui@latest add switch
+npx shadcn-ui@latest add checkbox
+npx shadcn-ui@latest add radio-group
+npx shadcn-ui@latest add slider
+npx shadcn-ui@latest add progress
+npx shadcn-ui@latest add scroll-area
+```
+
+This installs 25 core components into `apps/web/components/ui/`.
+
+##### **Step 3: Configure Tailwind Design Tokens**
+
+Update `apps/web/tailwind.config.ts`:
+
+```typescript
+import type { Config } from 'tailwindcss'
+import { fontFamily } from 'tailwindcss/defaultTheme'
+
+const config: Config = {
+  darkMode: ['class'],
+  content: [
+    './pages/**/*.{ts,tsx}',
+    './components/**/*.{ts,tsx}',
+    './app/**/*.{ts,tsx}',
+    './src/**/*.{ts,tsx}',
+  ],
+  theme: {
+    container: {
+      center: true,
+      padding: '2rem',
+      screens: {
+        '2xl': '1400px',
+      },
+    },
+    extend: {
+      colors: {
+        border: 'hsl(var(--border))',
+        input: 'hsl(var(--input))',
+        ring: 'hsl(var(--ring))',
+        background: 'hsl(var(--background))',
+        foreground: 'hsl(var(--foreground))',
+        primary: {
+          DEFAULT: 'hsl(var(--primary))',
+          foreground: 'hsl(var(--primary-foreground))',
+        },
+        secondary: {
+          DEFAULT: 'hsl(var(--secondary))',
+          foreground: 'hsl(var(--secondary-foreground))',
+        },
+        destructive: {
+          DEFAULT: 'hsl(var(--destructive))',
+          foreground: 'hsl(var(--destructive-foreground))',
+        },
+        muted: {
+          DEFAULT: 'hsl(var(--muted))',
+          foreground: 'hsl(var(--muted-foreground))',
+        },
+        accent: {
+          DEFAULT: 'hsl(var(--accent))',
+          foreground: 'hsl(var(--accent-foreground))',
+        },
+        popover: {
+          DEFAULT: 'hsl(var(--popover))',
+          foreground: 'hsl(var(--popover-foreground))',
+        },
+        card: {
+          DEFAULT: 'hsl(var(--card))',
+          foreground: 'hsl(var(--card-foreground))',
+        },
+      },
+      borderRadius: {
+        lg: 'var(--radius)',
+        md: 'calc(var(--radius) - 2px)',
+        sm: 'calc(var(--radius) - 4px)',
+      },
+      fontFamily: {
+        sans: ['var(--font-sans)', ...fontFamily.sans],
+      },
+      keyframes: {
+        'accordion-down': {
+          from: { height: '0' },
+          to: { height: 'var(--radix-accordion-content-height)' },
+        },
+        'accordion-up': {
+          from: { height: 'var(--radix-accordion-content-height)' },
+          to: { height: '0' },
+        },
+        'fade-in': {
+          from: { opacity: '0' },
+          to: { opacity: '1' },
+        },
+        'slide-in-from-top': {
+          from: { transform: 'translateY(-10px)', opacity: '0' },
+          to: { transform: 'translateY(0)', opacity: '1' },
+        },
+        'slide-in-from-bottom': {
+          from: { transform: 'translateY(10px)', opacity: '0' },
+          to: { transform: 'translateY(0)', opacity: '1' },
+        },
+      },
+      animation: {
+        'accordion-down': 'accordion-down 0.2s ease-out',
+        'accordion-up': 'accordion-up 0.2s ease-out',
+        'fade-in': 'fade-in 0.2s ease-out',
+        'slide-in-from-top': 'slide-in-from-top 0.3s ease-out',
+        'slide-in-from-bottom': 'slide-in-from-bottom 0.3s ease-out',
+      },
+    },
+  },
+  plugins: [require('tailwindcss-animate')],
+}
+
+export default config
+```
+
+##### **Step 4: Set Up CSS Variables in globals.css**
+
+Update `apps/web/app/globals.css`:
+
+```css
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+
+    --primary: 222.2 47.4% 11.2%;
+    --primary-foreground: 210 40% 98%;
+
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 222.2 84% 4.9%;
+
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 210 40% 98%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 212.7 26.8% 83.9%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+```
+
+##### **Step 5: Install Dark Mode Dependencies**
+
+Install `next-themes` for dark mode support:
+
+```bash
+pnpm add next-themes
+```
+
+Create theme provider `apps/web/components/theme-provider.tsx`:
+
+```typescript
+'use client'
+
+import * as React from 'react'
+import { ThemeProvider as NextThemesProvider } from 'next-themes'
+import { type ThemeProviderProps } from 'next-themes/dist/types'
+
+export function ThemeProvider({ children, ...props }: ThemeProviderProps) {
+  return <NextThemesProvider {...props}>{children}</NextThemesProvider>
+}
+```
+
+Update root layout `apps/web/app/layout.tsx`:
+
+```typescript
+import { Inter } from 'next/font/google'
+import { ThemeProvider } from '@/components/theme-provider'
+import { Toaster } from '@/components/ui/toaster'
+import './globals.css'
+
+const inter = Inter({ subsets: ['latin'], variable: '--font-sans' })
+
+export const metadata = {
+  title: 'BTRMe - Build Apps with AI',
+  description: 'Create production-ready web apps with natural language prompts',
+}
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
+  return (
+    <html lang="en" suppressHydrationWarning>
+      <body className={inter.variable}>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          {children}
+          <Toaster />
+        </ThemeProvider>
+      </body>
+    </html>
+  )
+}
+```
+
+##### **Step 6: Verify Installation**
+
+Check that all components are installed:
+
+```bash
+ls apps/web/components/ui/
+# Expected output:
+# button.tsx, input.tsx, label.tsx, card.tsx, badge.tsx, etc. (25 files)
+```
+
+Test import in a component:
+
+```typescript
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+
+export default function TestPage() {
+  return (
+    <div className="p-8">
+      <Card>
+        <CardHeader>
+          <CardTitle>shadcn/ui Test</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Button>Click Me</Button>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+```
+
+**Deliverables:**
+- ✅ `components.json` configured
+- ✅ 25 shadcn/ui components in `apps/web/components/ui/`
+- ✅ Tailwind config with design tokens
+- ✅ CSS variables for light/dark themes
+- ✅ `next-themes` provider in root layout
+- ✅ No TypeScript errors
+
+**Testing:**
+```bash
+# Type check
+pnpm --filter web type-check
+
+# Build (ensures no import errors)
+pnpm --filter web build
+
+# Run dev server and manually test a component
+pnpm --filter web dev
+```
+
+---
+
+#### **Task 1.3.1.2: Create Theme Toggle Component** (2 SP, 4 hours)
+
+**Description:** Build a theme toggle button component that allows users to switch between light, dark, and system themes with smooth transitions.
+
+**Steps:**
+
+##### **Step 1: Create Theme Toggle Component**
+
+File: `apps/web/components/theme-toggle.tsx`
+
+```typescript
+'use client'
+
+import * as React from 'react'
+import { Moon, Sun, Monitor } from 'lucide-react'
+import { useTheme } from 'next-themes'
+
+import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+
+export function ThemeToggle() {
+  const { theme, setTheme } = useTheme()
+  const [mounted, setMounted] = React.useState(false)
+
+  // Avoid hydration mismatch by only rendering after mount
+  React.useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  if (!mounted) {
+    return (
+      <Button variant="ghost" size="icon" disabled>
+        <Sun className="h-5 w-5" />
+        <span className="sr-only">Toggle theme</span>
+      </Button>
+    )
+  }
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon">
+          <Sun className="h-5 w-5 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+          <Moon className="absolute h-5 w-5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+          <span className="sr-only">Toggle theme</span>
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onClick={() => setTheme('light')}>
+          <Sun className="mr-2 h-4 w-4" />
+          <span>Light</span>
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => setTheme('dark')}>
+          <Moon className="mr-2 h-4 w-4" />
+          <span>Dark</span>
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => setTheme('system')}>
+          <Monitor className="mr-2 h-4 w-4" />
+          <span>System</span>
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+```
+
+**Key Features:**
+- **Icons:** `lucide-react` icons (Sun/Moon/Monitor)
+- **Smooth transitions:** CSS transitions on icon rotation
+- **Hydration safety:** `mounted` state prevents SSR mismatch
+- **Accessibility:** Screen reader text, keyboard navigation
+- **3 theme options:** Light, Dark, System (follows OS preference)
+
+##### **Step 2: Install lucide-react Icons**
+
+```bash
+pnpm add lucide-react
+```
+
+##### **Step 3: Add Theme Toggle to Test Page**
+
+Update a test page to include the toggle (e.g., dashboard):
+
+```typescript
+import { ThemeToggle } from '@/components/theme-toggle'
+
+export default function DashboardPage() {
+  return (
+    <div className="p-8">
+      <div className="flex items-center justify-between mb-8">
+        <h1 className="text-3xl font-bold">Dashboard</h1>
+        <ThemeToggle />
+      </div>
+      {/* Rest of dashboard */}
+    </div>
+  )
+}
+```
+
+##### **Step 4: Test Theme Persistence**
+
+The theme preference persists automatically via `next-themes` in `localStorage`:
+
+```javascript
+// Check in browser console
+localStorage.getItem('theme') // Returns: "light", "dark", or "system"
+```
+
+**Deliverables:**
+- ✅ `components/theme-toggle.tsx` component
+- ✅ `lucide-react` installed
+- ✅ Theme persists in localStorage
+- ✅ No flash of unstyled content (FOUC)
+- ✅ Accessible with keyboard and screen readers
+
+**Testing:**
+1. **Manual Testing:**
+   - Click theme toggle → dropdown opens
+   - Select "Light" → UI switches to light theme
+   - Select "Dark" → UI switches to dark theme
+   - Select "System" → UI follows OS preference
+   - Refresh page → theme persists
+
+2. **Accessibility Testing:**
+   ```typescript
+   // apps/web/__tests__/theme-toggle.test.tsx
+   import { render, screen } from '@testing-library/react'
+   import { ThemeToggle } from '@/components/theme-toggle'
+   import { ThemeProvider } from '@/components/theme-provider'
+
+   describe('ThemeToggle', () => {
+     it('renders toggle button', () => {
+       render(
+         <ThemeProvider>
+           <ThemeToggle />
+         </ThemeProvider>
+       )
+       expect(screen.getByRole('button', { name: /toggle theme/i })).toBeInTheDocument()
+     })
+
+     it('has accessible screen reader text', () => {
+       render(
+         <ThemeProvider>
+           <ThemeToggle />
+         </ThemeProvider>
+       )
+       expect(screen.getByText('Toggle theme')).toHaveClass('sr-only')
+     })
+   })
+   ```
+
+---
+
+#### **Task 1.3.1.3: Create Custom Composite Components** (3 SP, 7 hours)
+
+**Description:** Build reusable composite components that combine shadcn/ui primitives for common patterns (e.g., EmptyState, PageHeader, LoadingSpinner, ErrorBoundary).
+
+**Steps:**
+
+##### **Step 1: Create EmptyState Component**
+
+File: `apps/web/components/empty-state.tsx`
+
+```typescript
+import { type LucideIcon } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+
+interface EmptyStateProps {
+  icon?: LucideIcon
+  title: string
+  description: string
+  action?: {
+    label: string
+    onClick: () => void
+  }
+}
+
+export function EmptyState({
+  icon: Icon,
+  title,
+  description,
+  action,
+}: EmptyStateProps) {
+  return (
+    <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+      {Icon && (
+        <div className="mb-4 rounded-full bg-muted p-4">
+          <Icon className="h-8 w-8 text-muted-foreground" />
+        </div>
+      )}
+      <h3 className="mb-2 text-lg font-semibold">{title}</h3>
+      <p className="mb-6 max-w-sm text-sm text-muted-foreground">
+        {description}
+      </p>
+      {action && (
+        <Button onClick={action.onClick}>{action.label}</Button>
+      )}
+    </div>
+  )
+}
+```
+
+**Usage Example:**
+```typescript
+import { FolderOpen } from 'lucide-react'
+import { EmptyState } from '@/components/empty-state'
+
+<EmptyState
+  icon={FolderOpen}
+  title="No projects yet"
+  description="Create your first project to get started building with AI."
+  action={{
+    label: 'Create Project',
+    onClick: () => router.push('/projects/new'),
+  }}
+/>
+```
+
+##### **Step 2: Create PageHeader Component**
+
+File: `apps/web/components/page-header.tsx`
+
+```typescript
+import { type ReactNode } from 'react'
+import { Separator } from '@/components/ui/separator'
+
+interface PageHeaderProps {
+  title: string
+  description?: string
+  action?: ReactNode
+}
+
+export function PageHeader({ title, description, action }: PageHeaderProps) {
+  return (
+    <div className="space-y-4 pb-6">
+      <div className="flex items-center justify-between">
+        <div className="space-y-1">
+          <h1 className="text-3xl font-bold tracking-tight">{title}</h1>
+          {description && (
+            <p className="text-muted-foreground">{description}</p>
+          )}
+        </div>
+        {action && <div>{action}</div>}
+      </div>
+      <Separator />
+    </div>
+  )
+}
+```
+
+**Usage Example:**
+```typescript
+import { PageHeader } from '@/components/page-header'
+import { Button } from '@/components/ui/button'
+import { Plus } from 'lucide-react'
+
+<PageHeader
+  title="My Projects"
+  description="Manage all your AI-generated applications"
+  action={
+    <Button>
+      <Plus className="mr-2 h-4 w-4" />
+      New Project
+    </Button>
+  }
+/>
+```
+
+##### **Step 3: Create LoadingSpinner Component**
+
+File: `apps/web/components/loading-spinner.tsx`
+
+```typescript
+import { Loader2 } from 'lucide-react'
+import { cn } from '@/lib/utils'
+
+interface LoadingSpinnerProps {
+  size?: 'sm' | 'md' | 'lg'
+  className?: string
+  label?: string
+}
+
+const sizeClasses = {
+  sm: 'h-4 w-4',
+  md: 'h-8 w-8',
+  lg: 'h-12 w-12',
+}
+
+export function LoadingSpinner({
+  size = 'md',
+  className,
+  label,
+}: LoadingSpinnerProps) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-2">
+      <Loader2
+        className={cn('animate-spin text-muted-foreground', sizeClasses[size], className)}
+      />
+      {label && (
+        <p className="text-sm text-muted-foreground">{label}</p>
+      )}
+    </div>
+  )
+}
+```
+
+**Usage Example:**
+```typescript
+import { LoadingSpinner } from '@/components/loading-spinner'
+
+// In a page
+export default function ProjectsPage() {
+  const { data, isLoading } = useQuery('projects', fetchProjects)
+
+  if (isLoading) {
+    return <LoadingSpinner size="lg" label="Loading projects..." />
+  }
+
+  return <div>{/* Projects list */}</div>
+}
+```
+
+##### **Step 4: Create ErrorBoundary Component**
+
+File: `apps/web/components/error-boundary.tsx`
+
+```typescript
+'use client'
+
+import { Component, type ReactNode } from 'react'
+import { AlertTriangle } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+
+interface ErrorBoundaryProps {
+  children: ReactNode
+  fallback?: ReactNode
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean
+  error: Error | null
+}
+
+export class ErrorBoundary extends Component<
+  ErrorBoundaryProps,
+  ErrorBoundaryState
+> {
+  constructor(props: ErrorBoundaryProps) {
+    super(props)
+    this.state = { hasError: false, error: null }
+  }
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, error }
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error('ErrorBoundary caught an error:', error, errorInfo)
+    // TODO: Log to error tracking service (Sentry, LogRocket, etc.)
+  }
+
+  render() {
+    if (this.state.hasError) {
+      if (this.props.fallback) {
+        return this.props.fallback
+      }
+
+      return (
+        <div className="flex min-h-screen items-center justify-center p-4">
+          <Alert variant="destructive" className="max-w-md">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle>Something went wrong</AlertTitle>
+            <AlertDescription className="mt-2 space-y-4">
+              <p className="text-sm">
+                {this.state.error?.message || 'An unexpected error occurred'}
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => this.setState({ hasError: false, error: null })}
+              >
+                Try again
+              </Button>
+            </AlertDescription>
+          </Alert>
+        </div>
+      )
+    }
+
+    return this.props.children
+  }
+}
+```
+
+**Usage Example:**
+```typescript
+// Wrap in layout or specific pages
+import { ErrorBoundary } from '@/components/error-boundary'
+
+export default function ProjectLayout({ children }) {
+  return (
+    <ErrorBoundary>
+      {children}
+    </ErrorBoundary>
+  )
+}
+```
+
+##### **Step 5: Create Status Badge Component**
+
+File: `apps/web/components/status-badge.tsx`
+
+```typescript
+import { Badge } from '@/components/ui/badge'
+import { cn } from '@/lib/utils'
+
+type Status = 'success' | 'warning' | 'error' | 'info' | 'neutral'
+
+interface StatusBadgeProps {
+  status: Status
+  label: string
+  className?: string
+}
+
+const statusStyles: Record<Status, string> = {
+  success: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
+  warning: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400',
+  error: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
+  info: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
+  neutral: 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300',
+}
+
+export function StatusBadge({ status, label, className }: StatusBadgeProps) {
+  return (
+    <Badge
+      variant="outline"
+      className={cn(statusStyles[status], className)}
+    >
+      {label}
+    </Badge>
+  )
+}
+```
+
+**Usage Example:**
+```typescript
+import { StatusBadge } from '@/components/status-badge'
+
+<StatusBadge status="success" label="Deployed" />
+<StatusBadge status="warning" label="Building" />
+<StatusBadge status="error" label="Failed" />
+```
+
+##### **Step 6: Create DataTable Component Wrapper**
+
+File: `apps/web/components/data-table.tsx`
+
+```typescript
+'use client'
+
+import {
+  type ColumnDef,
+  flexRender,
+  getCoreRowModel,
+  useReactTable,
+  getPaginationRowModel,
+  getSortedRowModel,
+  type SortingState,
+} from '@tanstack/react-table'
+import { useState } from 'react'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import { Button } from '@/components/ui/button'
+
+interface DataTableProps<TData, TValue> {
+  columns: ColumnDef<TData, TValue>[]
+  data: TData[]
+  pageSize?: number
+}
+
+export function DataTable<TData, TValue>({
+  columns,
+  data,
+  pageSize = 10,
+}: DataTableProps<TData, TValue>) {
+  const [sorting, setSorting] = useState<SortingState>([])
+
+  const table = useReactTable({
+    data,
+    columns,
+    getCoreRowModel: getCoreRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    onSortingChange: setSorting,
+    state: {
+      sorting,
+    },
+    initialState: {
+      pagination: {
+        pageSize,
+      },
+    },
+  })
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-md border">
+        <Table>
+          <TableHeader>
+            {table.getHeaderGroups().map((headerGroup) => (
+              <TableRow key={headerGroup.id}>
+                {headerGroup.headers.map((header) => (
+                  <TableHead key={header.id}>
+                    {header.isPlaceholder
+                      ? null
+                      : flexRender(
+                          header.column.columnDef.header,
+                          header.getContext()
+                        )}
+                  </TableHead>
+                ))}
+              </TableRow>
+            ))}
+          </TableHeader>
+          <TableBody>
+            {table.getRowModel().rows?.length ? (
+              table.getRowModel().rows.map((row) => (
+                <TableRow
+                  key={row.id}
+                  data-state={row.getIsSelected() && 'selected'}
+                >
+                  {row.getVisibleCells().map((cell) => (
+                    <TableCell key={cell.id}>
+                      {flexRender(
+                        cell.column.columnDef.cell,
+                        cell.getContext()
+                      )}
+                    </TableCell>
+                  ))}
+                </TableRow>
+              ))
+            ) : (
+              <TableRow>
+                <TableCell
+                  colSpan={columns.length}
+                  className="h-24 text-center"
+                >
+                  No results.
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </div>
+
+      {/* Pagination */}
+      <div className="flex items-center justify-end space-x-2">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => table.previousPage()}
+          disabled={!table.getCanPreviousPage()}
+        >
+          Previous
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => table.nextPage()}
+          disabled={!table.getCanNextPage()}
+        >
+          Next
+        </Button>
+      </div>
+    </div>
+  )
+}
+```
+
+**Install TanStack Table:**
+```bash
+pnpm add @tanstack/react-table
+```
+
+**Usage Example:**
+```typescript
+import { DataTable } from '@/components/data-table'
+import { type ColumnDef } from '@tanstack/react-table'
+
+interface Project {
+  id: string
+  name: string
+  status: string
+  createdAt: Date
+}
+
+const columns: ColumnDef<Project>[] = [
+  { accessorKey: 'name', header: 'Name' },
+  { accessorKey: 'status', header: 'Status' },
+  { accessorKey: 'createdAt', header: 'Created' },
+]
+
+export function ProjectsTable({ projects }: { projects: Project[] }) {
+  return <DataTable columns={columns} data={projects} />
+}
+```
+
+**Deliverables:**
+- ✅ `empty-state.tsx` - EmptyState component
+- ✅ `page-header.tsx` - PageHeader component
+- ✅ `loading-spinner.tsx` - LoadingSpinner component
+- ✅ `error-boundary.tsx` - ErrorBoundary component
+- ✅ `status-badge.tsx` - StatusBadge component
+- ✅ `data-table.tsx` - DataTable wrapper for TanStack Table
+- ✅ All components typed with TypeScript
+- ✅ All components use shadcn/ui primitives
+
+**Testing:**
+
+1. **Unit Tests:**
+
+```typescript
+// apps/web/__tests__/components/empty-state.test.tsx
+import { render, screen, fireEvent } from '@testing-library/react'
+import { EmptyState } from '@/components/empty-state'
+import { FolderOpen } from 'lucide-react'
+
+describe('EmptyState', () => {
+  it('renders title and description', () => {
+    render(
+      <EmptyState
+        icon={FolderOpen}
+        title="No projects"
+        description="Create your first project"
+      />
+    )
+    expect(screen.getByText('No projects')).toBeInTheDocument()
+    expect(screen.getByText('Create your first project')).toBeInTheDocument()
+  })
+
+  it('calls action onClick', () => {
+    const handleClick = vi.fn()
+    render(
+      <EmptyState
+        title="No projects"
+        description="Create your first project"
+        action={{ label: 'Create', onClick: handleClick }}
+      />
+    )
+    fireEvent.click(screen.getByText('Create'))
+    expect(handleClick).toHaveBeenCalledTimes(1)
+  })
+})
+```
+
+2. **Visual Regression Test (Storybook - Optional):**
+
+```typescript
+// apps/web/stories/empty-state.stories.tsx
+import type { Meta, StoryObj } from '@storybook/react'
+import { EmptyState } from '@/components/empty-state'
+import { FolderOpen } from 'lucide-react'
+
+const meta: Meta<typeof EmptyState> = {
+  title: 'Components/EmptyState',
+  component: EmptyState,
+}
+
+export default meta
+type Story = StoryObj<typeof EmptyState>
+
+export const Default: Story = {
+  args: {
+    icon: FolderOpen,
+    title: 'No projects yet',
+    description: 'Create your first project to get started.',
+    action: {
+      label: 'Create Project',
+      onClick: () => alert('Create project'),
+    },
+  },
+}
+```
+
+3. **Accessibility Test:**
+
+```typescript
+// apps/web/__tests__/components/page-header.test.tsx
+import { render } from '@testing-library/react'
+import { axe, toHaveNoViolations } from 'jest-axe'
+import { PageHeader } from '@/components/page-header'
+
+expect.extend(toHaveNoViolations)
+
+describe('PageHeader Accessibility', () => {
+  it('has no accessibility violations', async () => {
+    const { container } = render(
+      <PageHeader title="Dashboard" description="Welcome back" />
+    )
+    const results = await axe(container)
+    expect(results).toHaveNoViolations()
+  })
+})
+```
+
+---
+
+### **Story 1.3.1 Summary**
+
+**Completed Tasks:**
+1. ✅ Task 1.3.1.1: Install and Configure shadcn/ui (7 hours)
+2. ✅ Task 1.3.1.2: Create Theme Toggle Component (4 hours)
+3. ✅ Task 1.3.1.3: Create Custom Composite Components (7 hours)
+
+**Total Time:** 18 hours
+**Story Points:** 8 SP
+
+**Files Created/Modified:**
+- `apps/web/components.json` - shadcn/ui config
+- `apps/web/components/ui/*` - 25 shadcn/ui components
+- `apps/web/tailwind.config.ts` - Design tokens
+- `apps/web/app/globals.css` - CSS variables
+- `apps/web/components/theme-provider.tsx` - Theme provider
+- `apps/web/components/theme-toggle.tsx` - Theme toggle
+- `apps/web/components/empty-state.tsx` - EmptyState
+- `apps/web/components/page-header.tsx` - PageHeader
+- `apps/web/components/loading-spinner.tsx` - LoadingSpinner
+- `apps/web/components/error-boundary.tsx` - ErrorBoundary
+- `apps/web/components/status-badge.tsx` - StatusBadge
+- `apps/web/components/data-table.tsx` - DataTable
+- `apps/web/app/layout.tsx` - Updated with ThemeProvider
+
+**Dependencies Installed:**
+- `next-themes` - Dark mode support
+- `lucide-react` - Icon library
+- `@tanstack/react-table` - Table component
+- `tailwindcss-animate` - Tailwind animations
+
+**Acceptance Criteria Met:**
+- ✅ shadcn/ui components installed and configured
+- ✅ Design tokens configured with Tailwind CSS
+- ✅ Dark mode support with smooth transitions
+- ✅ All components WCAG 2.1 AA compliant
+- ✅ Theme persists in localStorage
+- ✅ No flash of unstyled content (FOUC)
+- ✅ Composite components created for common patterns
+
+**Next Story:**
+→ Story 1.3.2: Layout Components (8 SP, 18 hours)
+
+---

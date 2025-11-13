@@ -10597,3 +10597,1229 @@ describe('Footer', () => {
 → Story 1.3.3: API Foundation (10 SP, 22 hours)
 
 ---
+
+### Story 1.3.3: API Foundation (10 SP, 22 hours)
+
+**User Story:**
+As a **developer**, I want a **robust API foundation with type safety, validation, and error handling** so that **I can build reliable backend features quickly without worrying about common pitfalls**.
+
+**Acceptance Criteria (Gherkin):**
+
+```gherkin
+Feature: API Foundation
+
+  Scenario: Type-safe API routes
+    Given I create a new API endpoint
+    When I use the API wrapper
+    Then The request and response are fully typed
+    And TypeScript catches type errors at compile time
+    And Zod validates runtime data
+
+  Scenario: Global error handling
+    Given An API endpoint throws an error
+    When The error is caught by middleware
+    Then A consistent error response is returned
+    And The error is logged with context
+    And The client receives appropriate status codes
+
+  Scenario: Request validation
+    Given A client sends invalid data
+    When The API receives the request
+    Then Zod validation catches the error
+    And A 400 Bad Request response is returned
+    And Validation errors are detailed in the response
+
+  Scenario: Rate limiting
+    Given A client makes too many requests
+    When The rate limit is exceeded
+    Then A 429 Too Many Requests response is returned
+    And The client receives retry-after headers
+```
+
+**Story Points:** 10 SP
+**Estimated Hours:** 22 hours
+**Priority:** High
+**Dependencies:** Story 1.1.3 (Database & ORM), Story 1.2.1 (Authentication)
+
+---
+
+#### **Task 1.3.3.1: Set Up API Route Handlers with Validation** (4 SP, 9 hours)
+
+**Description:** Create a standardized API route handler pattern with Zod validation, error handling, and TypeScript type safety for Next.js App Router.
+
+**Steps:**
+
+##### **Step 1: Install Dependencies**
+
+```bash
+pnpm add zod
+pnpm add -D @types/node
+```
+
+##### **Step 2: Create API Response Types**
+
+File: `apps/web/lib/api/types.ts`
+
+```typescript
+import { type NextRequest } from 'next/server'
+
+export interface ApiResponse<T = unknown> {
+  success: boolean
+  data?: T
+  error?: {
+    message: string
+    code: string
+    details?: unknown
+  }
+  meta?: {
+    page?: number
+    limit?: number
+    total?: number
+  }
+}
+
+export interface ApiContext {
+  req: NextRequest
+  params?: Record<string, string>
+}
+
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    public statusCode: number = 500,
+    public code: string = 'INTERNAL_ERROR',
+    public details?: unknown
+  ) {
+    super(message)
+    this.name = 'ApiError'
+  }
+}
+
+export class ValidationError extends ApiError {
+  constructor(message: string, details?: unknown) {
+    super(message, 400, 'VALIDATION_ERROR', details)
+    this.name = 'ValidationError'
+  }
+}
+
+export class UnauthorizedError extends ApiError {
+  constructor(message: string = 'Unauthorized') {
+    super(message, 401, 'UNAUTHORIZED')
+    this.name = 'UnauthorizedError'
+  }
+}
+
+export class ForbiddenError extends ApiError {
+  constructor(message: string = 'Forbidden') {
+    super(message, 403, 'FORBIDDEN')
+    this.name = 'ForbiddenError'
+  }
+}
+
+export class NotFoundError extends ApiError {
+  constructor(message: string = 'Resource not found') {
+    super(message, 404, 'NOT_FOUND')
+    this.name = 'NotFoundError'
+  }
+}
+
+export class RateLimitError extends ApiError {
+  constructor(message: string = 'Rate limit exceeded') {
+    super(message, 429, 'RATE_LIMIT_EXCEEDED')
+    this.name = 'RateLimitError'
+  }
+}
+```
+
+##### **Step 3: Create API Handler Wrapper**
+
+File: `apps/web/lib/api/handler.ts`
+
+```typescript
+import { type NextRequest, NextResponse } from 'next/server'
+import { ZodSchema, ZodError } from 'zod'
+import { ApiError, ValidationError, type ApiResponse } from './types'
+
+export interface HandlerOptions<TBody = unknown, TParams = unknown> {
+  bodySchema?: ZodSchema<TBody>
+  paramsSchema?: ZodSchema<TParams>
+  requireAuth?: boolean
+}
+
+type HandlerFunction<TBody = unknown, TParams = unknown, TResponse = unknown> = (
+  req: NextRequest,
+  context: {
+    body?: TBody
+    params?: TParams
+    userId?: string
+  }
+) => Promise<TResponse> | TResponse
+
+export function apiHandler<TBody = unknown, TParams = unknown, TResponse = unknown>(
+  handler: HandlerFunction<TBody, TParams, TResponse>,
+  options: HandlerOptions<TBody, TParams> = {}
+) {
+  return async (
+    req: NextRequest,
+    { params }: { params?: Record<string, string> } = {}
+  ): Promise<NextResponse<ApiResponse<TResponse>>> => {
+    try {
+      // Parse request body (if present and schema provided)
+      let body: TBody | undefined
+      if (options.bodySchema && req.method !== 'GET') {
+        try {
+          const rawBody = await req.json()
+          body = options.bodySchema.parse(rawBody)
+        } catch (error) {
+          if (error instanceof ZodError) {
+            throw new ValidationError('Invalid request body', error.errors)
+          }
+          throw error
+        }
+      }
+
+      // Validate params (if schema provided)
+      let validatedParams: TParams | undefined
+      if (options.paramsSchema && params) {
+        try {
+          validatedParams = options.paramsSchema.parse(params)
+        } catch (error) {
+          if (error instanceof ZodError) {
+            throw new ValidationError('Invalid request parameters', error.errors)
+          }
+          throw error
+        }
+      }
+
+      // Check authentication (if required)
+      let userId: string | undefined
+      if (options.requireAuth) {
+        const { getSession } = await import('@/lib/auth')
+        const session = await getSession()
+        if (!session) {
+          throw new ApiError('Unauthorized', 401, 'UNAUTHORIZED')
+        }
+        userId = session.user.id
+      }
+
+      // Execute handler
+      const data = await handler(req, {
+        body,
+        params: validatedParams,
+        userId,
+      })
+
+      // Return success response
+      return NextResponse.json<ApiResponse<TResponse>>(
+        {
+          success: true,
+          data,
+        },
+        { status: 200 }
+      )
+    } catch (error) {
+      // Handle known API errors
+      if (error instanceof ApiError) {
+        return NextResponse.json<ApiResponse>(
+          {
+            success: false,
+            error: {
+              message: error.message,
+              code: error.code,
+              details: error.details,
+            },
+          },
+          { status: error.statusCode }
+        )
+      }
+
+      // Handle unknown errors
+      console.error('Unhandled API error:', error)
+      return NextResponse.json<ApiResponse>(
+        {
+          success: false,
+          error: {
+            message: 'Internal server error',
+            code: 'INTERNAL_ERROR',
+          },
+        },
+        { status: 500 }
+      )
+    }
+  }
+}
+```
+
+**Key Features:**
+- **Type-safe:** Full TypeScript inference for request/response
+- **Zod validation:** Validates body and params at runtime
+- **Error handling:** Catches and formats all errors consistently
+- **Auth checking:** Optional authentication requirement
+- **Standardized responses:** Consistent API response format
+
+##### **Step 4: Create Example API Route**
+
+File: `apps/web/app/api/projects/route.ts`
+
+```typescript
+import { apiHandler } from '@/lib/api/handler'
+import { z } from 'zod'
+import { prisma } from '@/lib/db'
+import { NotFoundError } from '@/lib/api/types'
+
+// Request schemas
+const createProjectSchema = z.object({
+  name: z.string().min(1).max(100),
+  description: z.string().max(500).optional(),
+})
+
+// GET /api/projects - List user's projects
+export const GET = apiHandler(
+  async (req, { userId }) => {
+    const projects = await prisma.project.findMany({
+      where: { userId },
+      include: {
+        deployments: {
+          take: 1,
+          orderBy: { createdAt: 'desc' },
+        },
+      },
+      orderBy: { updatedAt: 'desc' },
+    })
+
+    return projects
+  },
+  { requireAuth: true }
+)
+
+// POST /api/projects - Create a new project
+export const POST = apiHandler(
+  async (req, { body, userId }) => {
+    const project = await prisma.project.create({
+      data: {
+        name: body!.name,
+        description: body!.description,
+        userId: userId!,
+      },
+    })
+
+    return project
+  },
+  {
+    requireAuth: true,
+    bodySchema: createProjectSchema,
+  }
+)
+```
+
+File: `apps/web/app/api/projects/[id]/route.ts`
+
+```typescript
+import { apiHandler } from '@/lib/api/handler'
+import { z } from 'zod'
+import { prisma } from '@/lib/db'
+import { NotFoundError, ForbiddenError } from '@/lib/api/types'
+
+const projectIdSchema = z.object({
+  id: z.string().uuid(),
+})
+
+const updateProjectSchema = z.object({
+  name: z.string().min(1).max(100).optional(),
+  description: z.string().max(500).optional(),
+})
+
+// GET /api/projects/:id - Get project details
+export const GET = apiHandler(
+  async (req, { params, userId }) => {
+    const project = await prisma.project.findUnique({
+      where: { id: params!.id },
+      include: {
+        deployments: {
+          orderBy: { createdAt: 'desc' },
+          take: 5,
+        },
+      },
+    })
+
+    if (!project) {
+      throw new NotFoundError('Project not found')
+    }
+
+    if (project.userId !== userId) {
+      throw new ForbiddenError('You do not have access to this project')
+    }
+
+    return project
+  },
+  {
+    requireAuth: true,
+    paramsSchema: projectIdSchema,
+  }
+)
+
+// PATCH /api/projects/:id - Update project
+export const PATCH = apiHandler(
+  async (req, { params, body, userId }) => {
+    const project = await prisma.project.findUnique({
+      where: { id: params!.id },
+    })
+
+    if (!project) {
+      throw new NotFoundError('Project not found')
+    }
+
+    if (project.userId !== userId) {
+      throw new ForbiddenError('You do not have access to this project')
+    }
+
+    const updated = await prisma.project.update({
+      where: { id: params!.id },
+      data: body,
+    })
+
+    return updated
+  },
+  {
+    requireAuth: true,
+    paramsSchema: projectIdSchema,
+    bodySchema: updateProjectSchema,
+  }
+)
+
+// DELETE /api/projects/:id - Delete project
+export const DELETE = apiHandler(
+  async (req, { params, userId }) => {
+    const project = await prisma.project.findUnique({
+      where: { id: params!.id },
+    })
+
+    if (!project) {
+      throw new NotFoundError('Project not found')
+    }
+
+    if (project.userId !== userId) {
+      throw new ForbiddenError('You do not have access to this project')
+    }
+
+    await prisma.project.delete({
+      where: { id: params!.id },
+    })
+
+    return { success: true }
+  },
+  {
+    requireAuth: true,
+    paramsSchema: projectIdSchema,
+  }
+)
+```
+
+**Deliverables:**
+- ✅ `lib/api/types.ts` - API types and custom errors
+- ✅ `lib/api/handler.ts` - API handler wrapper
+- ✅ `app/api/projects/route.ts` - Example LIST/CREATE endpoints
+- ✅ `app/api/projects/[id]/route.ts` - Example GET/UPDATE/DELETE endpoints
+- ✅ Full TypeScript type safety
+- ✅ Zod validation on all inputs
+
+**Testing:**
+
+```typescript
+// apps/web/__tests__/api/projects.test.ts
+import { describe, it, expect, vi } from 'vitest'
+import { GET, POST } from '@/app/api/projects/route'
+import { NextRequest } from 'next/server'
+
+vi.mock('@/lib/auth', () => ({
+  getSession: vi.fn().mockResolvedValue({
+    user: { id: 'user-123' },
+  }),
+}))
+
+vi.mock('@/lib/db', () => ({
+  prisma: {
+    project: {
+      findMany: vi.fn().mockResolvedValue([
+        { id: '1', name: 'Test Project', userId: 'user-123' },
+      ]),
+      create: vi.fn().mockImplementation((data) => ({
+        id: 'new-project-id',
+        ...data.data,
+      })),
+    },
+  },
+}))
+
+describe('GET /api/projects', () => {
+  it('returns user projects', async () => {
+    const req = new NextRequest('http://localhost/api/projects')
+    const response = await GET(req)
+    const json = await response.json()
+
+    expect(json.success).toBe(true)
+    expect(json.data).toHaveLength(1)
+    expect(json.data[0].name).toBe('Test Project')
+  })
+})
+
+describe('POST /api/projects', () => {
+  it('creates a new project', async () => {
+    const req = new NextRequest('http://localhost/api/projects', {
+      method: 'POST',
+      body: JSON.stringify({ name: 'New Project' }),
+    })
+    const response = await POST(req)
+    const json = await response.json()
+
+    expect(json.success).toBe(true)
+    expect(json.data.name).toBe('New Project')
+  })
+
+  it('validates request body', async () => {
+    const req = new NextRequest('http://localhost/api/projects', {
+      method: 'POST',
+      body: JSON.stringify({ name: '' }), // Invalid: empty name
+    })
+    const response = await POST(req)
+    const json = await response.json()
+
+    expect(json.success).toBe(false)
+    expect(json.error?.code).toBe('VALIDATION_ERROR')
+  })
+})
+```
+
+---
+
+#### **Task 1.3.3.2: Implement Rate Limiting Middleware** (3 SP, 7 hours)
+
+**Description:** Add rate limiting to API routes using Upstash Redis to prevent abuse and ensure fair usage across tiers.
+
+**Steps:**
+
+##### **Step 1: Install Dependencies**
+
+Already installed in Epic 1.1.3:
+- `@upstash/redis`
+- `@upstash/ratelimit`
+
+##### **Step 2: Create Rate Limit Utility**
+
+File: `apps/web/lib/api/rate-limit.ts`
+
+```typescript
+import { Ratelimit } from '@upstash/ratelimit'
+import { Redis } from '@upstash/redis'
+import { type NextRequest } from 'next/server'
+import { RateLimitError } from './types'
+
+const redis = new Redis({
+  url: process.env.UPSTASH_REDIS_REST_URL!,
+  token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+})
+
+// Different rate limits for different tiers
+export const rateLimiters = {
+  // Unauthenticated requests: 10 requests per 10 seconds
+  anonymous: new Ratelimit({
+    redis,
+    limiter: Ratelimit.slidingWindow(10, '10 s'),
+    analytics: true,
+    prefix: 'ratelimit:anonymous',
+  }),
+
+  // Authenticated requests (FREE tier): 50 requests per minute
+  authenticated: new Ratelimit({
+    redis,
+    limiter: Ratelimit.slidingWindow(50, '1 m'),
+    analytics: true,
+    prefix: 'ratelimit:authenticated',
+  }),
+
+  // PRO tier: 200 requests per minute
+  pro: new Ratelimit({
+    redis,
+    limiter: Ratelimit.slidingWindow(200, '1 m'),
+    analytics: true,
+    prefix: 'ratelimit:pro',
+  }),
+
+  // TEAM tier: 500 requests per minute
+  team: new Ratelimit({
+    redis,
+    limiter: Ratelimit.slidingWindow(500, '1 m'),
+    analytics: true,
+    prefix: 'ratelimit:team',
+  }),
+
+  // Generation endpoints: Stricter limits based on tier
+  generation: {
+    free: new Ratelimit({
+      redis,
+      limiter: Ratelimit.fixedWindow(7, '30 d'), // 7 per month
+      analytics: true,
+      prefix: 'ratelimit:generation:free',
+    }),
+    pro: new Ratelimit({
+      redis,
+      limiter: Ratelimit.fixedWindow(75, '30 d'), // 75 per month
+      analytics: true,
+      prefix: 'ratelimit:generation:pro',
+    }),
+    team: new Ratelimit({
+      redis,
+      limiter: Ratelimit.fixedWindow(150, '30 d'), // 150 per month
+      analytics: true,
+      prefix: 'ratelimit:generation:team',
+    }),
+  },
+}
+
+interface RateLimitOptions {
+  identifier: string
+  tier?: 'FREE' | 'PRO' | 'TEAM'
+  type?: 'general' | 'generation'
+}
+
+export async function checkRateLimit(options: RateLimitOptions): Promise<void> {
+  const { identifier, tier, type = 'general' } = options
+
+  let limiter: Ratelimit
+
+  if (type === 'generation') {
+    if (!tier) throw new Error('Tier required for generation rate limit')
+    limiter = rateLimiters.generation[tier.toLowerCase() as 'free' | 'pro' | 'team']
+  } else {
+    if (!tier) {
+      limiter = rateLimiters.anonymous
+    } else {
+      limiter = rateLimiters[tier.toLowerCase() as 'authenticated' | 'pro' | 'team']
+    }
+  }
+
+  const { success, limit, remaining, reset } = await limiter.limit(identifier)
+
+  if (!success) {
+    const resetDate = new Date(reset)
+    throw new RateLimitError(
+      `Rate limit exceeded. Try again at ${resetDate.toISOString()}`
+    )
+  }
+}
+
+export function getClientIdentifier(req: NextRequest): string {
+  // Try to get IP from headers (works with Vercel, Cloudflare, etc.)
+  const forwarded = req.headers.get('x-forwarded-for')
+  const realIp = req.headers.get('x-real-ip')
+  const ip = forwarded?.split(',')[0] || realIp || 'unknown'
+
+  return ip
+}
+```
+
+##### **Step 3: Update API Handler with Rate Limiting**
+
+Update `apps/web/lib/api/handler.ts`:
+
+```typescript
+import { type NextRequest, NextResponse } from 'next/server'
+import { ZodSchema, ZodError } from 'zod'
+import { ApiError, ValidationError, type ApiResponse } from './types'
+import { checkRateLimit, getClientIdentifier } from './rate-limit'
+
+export interface HandlerOptions<TBody = unknown, TParams = unknown> {
+  bodySchema?: ZodSchema<TBody>
+  paramsSchema?: ZodSchema<TParams>
+  requireAuth?: boolean
+  rateLimit?: boolean | 'generation' // New option
+}
+
+type HandlerFunction<TBody = unknown, TParams = unknown, TResponse = unknown> = (
+  req: NextRequest,
+  context: {
+    body?: TBody
+    params?: TParams
+    userId?: string
+    userTier?: 'FREE' | 'PRO' | 'TEAM'
+  }
+) => Promise<TResponse> | TResponse
+
+export function apiHandler<TBody = unknown, TParams = unknown, TResponse = unknown>(
+  handler: HandlerFunction<TBody, TParams, TResponse>,
+  options: HandlerOptions<TBody, TParams> = {}
+) {
+  return async (
+    req: NextRequest,
+    { params }: { params?: Record<string, string> } = {}
+  ): Promise<NextResponse<ApiResponse<TResponse>>> => {
+    try {
+      // Check authentication (if required)
+      let userId: string | undefined
+      let userTier: 'FREE' | 'PRO' | 'TEAM' | undefined
+
+      if (options.requireAuth) {
+        const { getSession } = await import('@/lib/auth')
+        const session = await getSession()
+        if (!session) {
+          throw new ApiError('Unauthorized', 401, 'UNAUTHORIZED')
+        }
+        userId = session.user.id
+        userTier = session.user.tier
+      }
+
+      // Check rate limit (if enabled)
+      if (options.rateLimit) {
+        const identifier = userId || getClientIdentifier(req)
+        const type = options.rateLimit === 'generation' ? 'generation' : 'general'
+
+        await checkRateLimit({
+          identifier,
+          tier: userTier,
+          type,
+        })
+      }
+
+      // Parse request body (if present and schema provided)
+      let body: TBody | undefined
+      if (options.bodySchema && req.method !== 'GET') {
+        try {
+          const rawBody = await req.json()
+          body = options.bodySchema.parse(rawBody)
+        } catch (error) {
+          if (error instanceof ZodError) {
+            throw new ValidationError('Invalid request body', error.errors)
+          }
+          throw error
+        }
+      }
+
+      // Validate params (if schema provided)
+      let validatedParams: TParams | undefined
+      if (options.paramsSchema && params) {
+        try {
+          validatedParams = options.paramsSchema.parse(params)
+        } catch (error) {
+          if (error instanceof ZodError) {
+            throw new ValidationError('Invalid request parameters', error.errors)
+          }
+          throw error
+        }
+      }
+
+      // Execute handler
+      const data = await handler(req, {
+        body,
+        params: validatedParams,
+        userId,
+        userTier,
+      })
+
+      // Return success response
+      return NextResponse.json<ApiResponse<TResponse>>(
+        {
+          success: true,
+          data,
+        },
+        { status: 200 }
+      )
+    } catch (error) {
+      // Handle known API errors
+      if (error instanceof ApiError) {
+        return NextResponse.json<ApiResponse>(
+          {
+            success: false,
+            error: {
+              message: error.message,
+              code: error.code,
+              details: error.details,
+            },
+          },
+          { status: error.statusCode }
+        )
+      }
+
+      // Handle unknown errors
+      console.error('Unhandled API error:', error)
+      return NextResponse.json<ApiResponse>(
+        {
+          success: false,
+          error: {
+            message: 'Internal server error',
+            code: 'INTERNAL_ERROR',
+          },
+        },
+        { status: 500 }
+      )
+    }
+  }
+}
+```
+
+##### **Step 4: Example Usage with Rate Limiting**
+
+Update `apps/web/app/api/projects/route.ts`:
+
+```typescript
+import { apiHandler } from '@/lib/api/handler'
+import { z } from 'zod'
+import { prisma } from '@/lib/db'
+
+const createProjectSchema = z.object({
+  name: z.string().min(1).max(100),
+  description: z.string().max(500).optional(),
+})
+
+// GET /api/projects - List user's projects (rate limited)
+export const GET = apiHandler(
+  async (req, { userId }) => {
+    const projects = await prisma.project.findMany({
+      where: { userId },
+      orderBy: { updatedAt: 'desc' },
+    })
+    return projects
+  },
+  {
+    requireAuth: true,
+    rateLimit: true, // Enable rate limiting
+  }
+)
+
+// POST /api/projects - Create a new project (rate limited)
+export const POST = apiHandler(
+  async (req, { body, userId }) => {
+    const project = await prisma.project.create({
+      data: {
+        name: body!.name,
+        description: body!.description,
+        userId: userId!,
+      },
+    })
+    return project
+  },
+  {
+    requireAuth: true,
+    bodySchema: createProjectSchema,
+    rateLimit: true, // Enable rate limiting
+  }
+)
+```
+
+Example for AI generation endpoint:
+
+```typescript
+// apps/web/app/api/generate/route.ts
+import { apiHandler } from '@/lib/api/handler'
+import { z } from 'zod'
+
+const generateSchema = z.object({
+  prompt: z.string().min(10).max(2000),
+  projectId: z.string().uuid().optional(),
+})
+
+export const POST = apiHandler(
+  async (req, { body, userId, userTier }) => {
+    // AI generation logic here...
+    return { generationId: 'gen-123', status: 'processing' }
+  },
+  {
+    requireAuth: true,
+    bodySchema: generateSchema,
+    rateLimit: 'generation', // Use generation-specific rate limit
+  }
+)
+```
+
+**Deliverables:**
+- ✅ `lib/api/rate-limit.ts` - Rate limiting utilities
+- ✅ Updated `lib/api/handler.ts` with rate limit support
+- ✅ Tier-based rate limits (FREE/PRO/TEAM)
+- ✅ Different limits for general API vs generation endpoints
+- ✅ Upstash Redis integration
+
+**Testing:**
+
+```typescript
+// apps/web/__tests__/api/rate-limit.test.ts
+import { describe, it, expect, vi } from 'vitest'
+import { checkRateLimit } from '@/lib/api/rate-limit'
+
+vi.mock('@upstash/redis', () => ({
+  Redis: vi.fn(() => ({
+    // Mock implementation
+  })),
+}))
+
+describe('Rate Limiting', () => {
+  it('allows requests within limit', async () => {
+    await expect(
+      checkRateLimit({
+        identifier: 'test-user',
+        tier: 'FREE',
+      })
+    ).resolves.not.toThrow()
+  })
+
+  it('throws error when limit exceeded', async () => {
+    // Mock Ratelimit to simulate exceeded limit
+    await expect(
+      checkRateLimit({
+        identifier: 'rate-limited-user',
+        tier: 'FREE',
+      })
+    ).rejects.toThrow('Rate limit exceeded')
+  })
+})
+```
+
+---
+
+#### **Task 1.3.3.3: Create API Client for Frontend** (3 SP, 6 hours)
+
+**Description:** Build a type-safe API client utility for the frontend that provides consistent error handling and loading states.
+
+**Steps:**
+
+##### **Step 1: Create API Client Utility**
+
+File: `apps/web/lib/api-client.ts`
+
+```typescript
+import { type ApiResponse } from './api/types'
+
+export class ApiClientError extends Error {
+  constructor(
+    message: string,
+    public statusCode: number,
+    public code: string,
+    public details?: unknown
+  ) {
+    super(message)
+    this.name = 'ApiClientError'
+  }
+}
+
+interface FetchOptions extends RequestInit {
+  params?: Record<string, string>
+}
+
+async function fetchApi<T>(
+  path: string,
+  options: FetchOptions = {}
+): Promise<T> {
+  const { params, ...fetchOptions } = options
+
+  // Build URL with query params
+  const url = new URL(path, window.location.origin)
+  if (params) {
+    Object.entries(params).forEach(([key, value]) => {
+      url.searchParams.append(key, value)
+    })
+  }
+
+  // Default headers
+  const headers = new Headers(fetchOptions.headers)
+  if (!headers.has('Content-Type') && fetchOptions.body) {
+    headers.set('Content-Type', 'application/json')
+  }
+
+  // Make request
+  const response = await fetch(url.toString(), {
+    ...fetchOptions,
+    headers,
+  })
+
+  // Parse response
+  const json: ApiResponse<T> = await response.json()
+
+  // Handle errors
+  if (!json.success || !response.ok) {
+    throw new ApiClientError(
+      json.error?.message || 'Request failed',
+      response.status,
+      json.error?.code || 'UNKNOWN_ERROR',
+      json.error?.details
+    )
+  }
+
+  return json.data as T
+}
+
+export const api = {
+  get: <T>(path: string, options?: FetchOptions) =>
+    fetchApi<T>(path, { ...options, method: 'GET' }),
+
+  post: <T>(path: string, body?: unknown, options?: FetchOptions) =>
+    fetchApi<T>(path, {
+      ...options,
+      method: 'POST',
+      body: body ? JSON.stringify(body) : undefined,
+    }),
+
+  patch: <T>(path: string, body?: unknown, options?: FetchOptions) =>
+    fetchApi<T>(path, {
+      ...options,
+      method: 'PATCH',
+      body: body ? JSON.stringify(body) : undefined,
+    }),
+
+  delete: <T>(path: string, options?: FetchOptions) =>
+    fetchApi<T>(path, { ...options, method: 'DELETE' }),
+}
+```
+
+##### **Step 2: Create React Hooks for API Calls**
+
+File: `apps/web/hooks/use-api.ts`
+
+```typescript
+'use client'
+
+import { useState, useCallback } from 'react'
+import { api, ApiClientError } from '@/lib/api-client'
+import { useToast } from '@/components/ui/use-toast'
+
+interface UseApiState<T> {
+  data: T | null
+  loading: boolean
+  error: ApiClientError | null
+}
+
+export function useApi<T>() {
+  const [state, setState] = useState<UseApiState<T>>({
+    data: null,
+    loading: false,
+    error: null,
+  })
+  const { toast } = useToast()
+
+  const execute = useCallback(
+    async (
+      apiCall: () => Promise<T>,
+      options?: {
+        successMessage?: string
+        errorMessage?: string
+        onSuccess?: (data: T) => void
+        onError?: (error: ApiClientError) => void
+      }
+    ) => {
+      setState({ data: null, loading: true, error: null })
+
+      try {
+        const data = await apiCall()
+        setState({ data, loading: false, error: null })
+
+        if (options?.successMessage) {
+          toast({
+            title: 'Success',
+            description: options.successMessage,
+          })
+        }
+
+        options?.onSuccess?.(data)
+        return data
+      } catch (error) {
+        const apiError =
+          error instanceof ApiClientError
+            ? error
+            : new ApiClientError('Unknown error', 500, 'UNKNOWN')
+
+        setState({ data: null, loading: false, error: apiError })
+
+        if (options?.errorMessage) {
+          toast({
+            title: 'Error',
+            description: options.errorMessage,
+            variant: 'destructive',
+          })
+        } else {
+          toast({
+            title: 'Error',
+            description: apiError.message,
+            variant: 'destructive',
+          })
+        }
+
+        options?.onError?.(apiError)
+        throw apiError
+      }
+    },
+    [toast]
+  )
+
+  return {
+    ...state,
+    execute,
+  }
+}
+```
+
+##### **Step 3: Create Typed API Functions**
+
+File: `apps/web/lib/api/projects.ts`
+
+```typescript
+import { api } from '@/lib/api-client'
+import type { Project, Deployment } from '@prisma/client'
+
+export interface ProjectWithDeployments extends Project {
+  deployments: Deployment[]
+}
+
+export const projectsApi = {
+  list: () => api.get<ProjectWithDeployments[]>('/api/projects'),
+
+  get: (id: string) =>
+    api.get<ProjectWithDeployments>(`/api/projects/${id}`),
+
+  create: (data: { name: string; description?: string }) =>
+    api.post<Project>('/api/projects', data),
+
+  update: (id: string, data: { name?: string; description?: string }) =>
+    api.patch<Project>(`/api/projects/${id}`, data),
+
+  delete: (id: string) => api.delete<{ success: boolean }>(`/api/projects/${id}`),
+}
+```
+
+##### **Step 4: Usage Example in Component**
+
+```typescript
+'use client'
+
+import { useEffect } from 'react'
+import { useApi } from '@/hooks/use-api'
+import { projectsApi, type ProjectWithDeployments } from '@/lib/api/projects'
+import { LoadingSpinner } from '@/components/loading-spinner'
+import { Button } from '@/components/ui/button'
+
+export function ProjectsList() {
+  const { data, loading, error, execute } = useApi<ProjectWithDeployments[]>()
+
+  useEffect(() => {
+    execute(() => projectsApi.list())
+  }, [execute])
+
+  if (loading) {
+    return <LoadingSpinner label="Loading projects..." />
+  }
+
+  if (error) {
+    return (
+      <div className="text-center">
+        <p className="text-destructive">Error: {error.message}</p>
+        <Button onClick={() => execute(() => projectsApi.list())}>
+          Retry
+        </Button>
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      {data?.map((project) => (
+        <div key={project.id}>{project.name}</div>
+      ))}
+    </div>
+  )
+}
+```
+
+**Deliverables:**
+- ✅ `lib/api-client.ts` - Type-safe fetch wrapper
+- ✅ `hooks/use-api.ts` - React hook for API calls
+- ✅ `lib/api/projects.ts` - Typed API functions for projects
+- ✅ Automatic error handling and toast notifications
+- ✅ Loading states management
+
+**Testing:**
+
+```typescript
+// apps/web/__tests__/hooks/use-api.test.ts
+import { renderHook, waitFor } from '@testing-library/react'
+import { useApi } from '@/hooks/use-api'
+
+describe('useApi hook', () => {
+  it('handles successful API call', async () => {
+    const { result } = renderHook(() => useApi<string>())
+
+    await result.current.execute(async () => 'success')
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false)
+      expect(result.current.data).toBe('success')
+      expect(result.current.error).toBe(null)
+    })
+  })
+
+  it('handles API errors', async () => {
+    const { result } = renderHook(() => useApi())
+
+    await expect(
+      result.current.execute(async () => {
+        throw new Error('Test error')
+      })
+    ).rejects.toThrow()
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false)
+      expect(result.current.error).toBeTruthy()
+    })
+  })
+})
+```
+
+---
+
+### **Story 1.3.3 Summary**
+
+**Completed Tasks:**
+1. ✅ Task 1.3.3.1: API Route Handlers with Validation (9 hours)
+2. ✅ Task 1.3.3.2: Rate Limiting Middleware (7 hours)
+3. ✅ Task 1.3.3.3: API Client for Frontend (6 hours)
+
+**Total Time:** 22 hours
+**Story Points:** 10 SP
+
+**Files Created/Modified:**
+- `apps/web/lib/api/types.ts` - API types and custom errors
+- `apps/web/lib/api/handler.ts` - API handler wrapper with validation
+- `apps/web/lib/api/rate-limit.ts` - Rate limiting utilities
+- `apps/web/app/api/projects/route.ts` - Example API routes
+- `apps/web/app/api/projects/[id]/route.ts` - Parameterized API routes
+- `apps/web/lib/api-client.ts` - Frontend API client
+- `apps/web/hooks/use-api.ts` - React hook for API calls
+- `apps/web/lib/api/projects.ts` - Typed API functions
+
+**Dependencies Installed:**
+- `zod` - Runtime validation
+
+**Acceptance Criteria Met:**
+- ✅ Type-safe API routes with TypeScript inference
+- ✅ Zod validation for request body and params
+- ✅ Global error handling with consistent responses
+- ✅ Rate limiting with tier-based limits
+- ✅ Frontend API client with error handling
+- ✅ React hooks for loading/error states
+
+**Next Epic:**
+→ Epic 1.4: Landing Page (20 SP, 48 hours)
+
+---
+
+## Epic 1.3 Complete! (26 SP, 58 hours)
+
+**Epic 1.3 Summary:**
+- ✅ Story 1.3.1: UI Component Library (8 SP, 18h)
+- ✅ Story 1.3.2: Layout Components (8 SP, 18h)
+- ✅ Story 1.3.3: API Foundation (10 SP, 22h)
+
+**Total Epic Points:** 26 SP
+**Total Epic Hours:** 58 hours
+
+**Sprint 1 Progress:** 60/80 SP complete (75%)
+
+**Remaining in Sprint 1:**
+- Epic 1.4: Landing Page (20 SP, 48 hours)
+
+---

@@ -1942,35 +1942,885 @@ Feature: Prompt Template System
 **Priority:** Critical
 **Dependencies:** Epic 2.1
 
-Due to context limitations, I'll provide a summary of the remaining work needed:
-
 ---
 
-## SPRINT 2 PROGRESS SUMMARY
+#### Task 2.2.1.1: Create Prompt Template Engine (8 hours)
 
-**Completed:**
-- ✅ Sprint 1: COMPLETE (80 SP, 13,130 lines)
-- ✅ Sprint 2 Epic 2.1: AI Model Integration (20 SP, 1,904 lines)
+**Implementation Steps:**
 
-**In Progress:**
-- 🔄 Sprint 2 remaining (65 SP):
-  - Epic 2.2: Prompt Engineering (25 SP) - Started
-  - Epic 2.3: Code Generation (20 SP)
-  - Epic 2.4: Template System (10 SP)
-  - Epic 2.5: Validation (10 SP)
+**Step 1: Define Template Types and Interfaces (1 hour)**
 
-**Remaining Sprints:**
-- Sprint 3: Deployment Pipeline (90 SP, ~14,000 lines)
-- Sprint 4: Templates & Iteration (85 SP, ~13,000 lines)
-- Sprint 5: Polish & Advanced Features (80 SP, ~12,500 lines)
-- Sprint 6: Testing & Launch (70 SP, ~11,000 lines)
-- Additional Documents: 4 docs (~18,000 words)
+Create type definitions for the prompt template system.
 
-**Total Work:**
-- **Completed:** 100 SP (15,034 lines)
-- **Remaining:** 390 SP + 4 docs (~78,000 lines)
+`apps/web/lib/prompts/types.ts`:
+```typescript
+// Template variable definition
+export interface TemplateVariable {
+  name: string
+  type: 'string' | 'array' | 'object' | 'boolean' | 'number'
+  required: boolean
+  default?: unknown
+  description: string
+  validation?: {
+    min?: number
+    max?: number
+    pattern?: string
+    enum?: string[]
+  }
+}
 
-The ultra-detailed documentation is progressing systematically with full code examples, testing procedures, and acceptance criteria for each story, maintaining the high quality established in Sprint 1.
+// Template metadata
+export interface TemplateMetadata {
+  id: string
+  name: string
+  description: string
+  category: 'web-app' | 'mobile-app' | 'api' | 'landing-page' | 'dashboard' | 'e-commerce'
+  version: string
+  author: string
+  tags: string[]
+  variables: TemplateVariable[]
+  defaultTechStack?: TechStack
+}
+
+// Tech stack definition
+export interface TechStack {
+  frontend?: {
+    framework: string
+    styling: string
+    stateManagement?: string
+  }
+  backend?: {
+    framework: string
+    database: string
+    orm?: string
+  }
+  deployment?: {
+    platform: string
+    ci?: string
+  }
+}
+
+// Compiled prompt result
+export interface CompiledPrompt {
+  content: string
+  metadata: {
+    templateId: string
+    variables: Record<string, unknown>
+    techStack: TechStack
+    compiledAt: Date
+  }
+  tokens: number
+  sections: {
+    system: string
+    context: string
+    requirements: string
+    constraints: string
+    output: string
+  }
+}
+
+// Template rendering context
+export interface TemplateContext {
+  variables: Record<string, unknown>
+  techStack: TechStack
+  userInput: {
+    description: string
+    features: string[]
+    preferences?: Record<string, unknown>
+  }
+}
+
+// Template validation result
+export interface ValidationResult {
+  valid: boolean
+  errors: Array<{
+    field: string
+    message: string
+    code: string
+  }>
+  warnings: Array<{
+    field: string
+    message: string
+  }>
+}
+```
+
+**Step 2: Create Template Engine Core (3 hours)**
+
+Build the core template engine with variable replacement and validation.
+
+`apps/web/lib/prompts/engine.ts`:
+```typescript
+import Handlebars from 'handlebars'
+import { z } from 'zod'
+import {
+  TemplateMetadata,
+  TemplateContext,
+  CompiledPrompt,
+  ValidationResult,
+  TemplateVariable,
+} from './types'
+import { countTokens } from '@/lib/ai/tokens'
+
+// Register Handlebars helpers
+Handlebars.registerHelper('join', function (array: string[], separator: string) {
+  return array.join(separator)
+})
+
+Handlebars.registerHelper('json', function (context: unknown) {
+  return JSON.stringify(context, null, 2)
+})
+
+Handlebars.registerHelper('uppercase', function (str: string) {
+  return str.toUpperCase()
+})
+
+Handlebars.registerHelper('lowercase', function (str: string) {
+  return str.toLowerCase()
+})
+
+Handlebars.registerHelper('titlecase', function (str: string) {
+  return str.replace(/\w\S*/g, (txt) => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase())
+})
+
+Handlebars.registerHelper('if_eq', function (a: unknown, b: unknown, options) {
+  return a === b ? options.fn(this) : options.inverse(this)
+})
+
+Handlebars.registerHelper('formatList', function (items: string[]) {
+  return items.map((item, idx) => `${idx + 1}. ${item}`).join('\n')
+})
+
+/**
+ * Template engine for prompt generation
+ */
+export class PromptTemplateEngine {
+  private templates: Map<string, Handlebars.TemplateDelegate> = new Map()
+  private metadata: Map<string, TemplateMetadata> = new Map()
+
+  /**
+   * Register a template
+   */
+  registerTemplate(metadata: TemplateMetadata, template: string): void {
+    try {
+      const compiled = Handlebars.compile(template, {
+        strict: true,
+        noEscape: true,
+      })
+
+      this.templates.set(metadata.id, compiled)
+      this.metadata.set(metadata.id, metadata)
+    } catch (error) {
+      throw new Error(`Failed to compile template ${metadata.id}: ${error.message}`)
+    }
+  }
+
+  /**
+   * Get template metadata
+   */
+  getMetadata(templateId: string): TemplateMetadata | undefined {
+    return this.metadata.get(templateId)
+  }
+
+  /**
+   * List all templates
+   */
+  listTemplates(): TemplateMetadata[] {
+    return Array.from(this.metadata.values())
+  }
+
+  /**
+   * Filter templates by category
+   */
+  filterTemplates(category?: string, tags?: string[]): TemplateMetadata[] {
+    let templates = this.listTemplates()
+
+    if (category) {
+      templates = templates.filter((t) => t.category === category)
+    }
+
+    if (tags && tags.length > 0) {
+      templates = templates.filter((t) => tags.some((tag) => t.tags.includes(tag)))
+    }
+
+    return templates
+  }
+
+  /**
+   * Validate template context
+   */
+  validateContext(templateId: string, context: Partial<TemplateContext>): ValidationResult {
+    const metadata = this.metadata.get(templateId)
+    if (!metadata) {
+      return {
+        valid: false,
+        errors: [{ field: 'templateId', message: 'Template not found', code: 'TEMPLATE_NOT_FOUND' }],
+        warnings: [],
+      }
+    }
+
+    const errors: ValidationResult['errors'] = []
+    const warnings: ValidationResult['warnings'] = []
+
+    // Validate variables
+    for (const variable of metadata.variables) {
+      const value = context.variables?.[variable.name]
+
+      // Check required
+      if (variable.required && (value === undefined || value === null)) {
+        errors.push({
+          field: variable.name,
+          message: `Variable '${variable.name}' is required`,
+          code: 'REQUIRED',
+        })
+        continue
+      }
+
+      // Skip if not provided and not required
+      if (value === undefined || value === null) {
+        continue
+      }
+
+      // Type validation
+      const actualType = Array.isArray(value) ? 'array' : typeof value
+      if (actualType !== variable.type) {
+        errors.push({
+          field: variable.name,
+          message: `Variable '${variable.name}' must be of type ${variable.type}`,
+          code: 'INVALID_TYPE',
+        })
+        continue
+      }
+
+      // Additional validation
+      if (variable.validation) {
+        const validation = variable.validation
+
+        // String length
+        if (variable.type === 'string' && typeof value === 'string') {
+          if (validation.min && value.length < validation.min) {
+            errors.push({
+              field: variable.name,
+              message: `Variable '${variable.name}' must be at least ${validation.min} characters`,
+              code: 'MIN_LENGTH',
+            })
+          }
+          if (validation.max && value.length > validation.max) {
+            errors.push({
+              field: variable.name,
+              message: `Variable '${variable.name}' must be at most ${validation.max} characters`,
+              code: 'MAX_LENGTH',
+            })
+          }
+          if (validation.pattern && !new RegExp(validation.pattern).test(value)) {
+            errors.push({
+              field: variable.name,
+              message: `Variable '${variable.name}' does not match required pattern`,
+              code: 'PATTERN_MISMATCH',
+            })
+          }
+        }
+
+        // Array length
+        if (variable.type === 'array' && Array.isArray(value)) {
+          if (validation.min && value.length < validation.min) {
+            errors.push({
+              field: variable.name,
+              message: `Variable '${variable.name}' must have at least ${validation.min} items`,
+              code: 'MIN_ITEMS',
+            })
+          }
+          if (validation.max && value.length > validation.max) {
+            errors.push({
+              field: variable.name,
+              message: `Variable '${variable.name}' must have at most ${validation.max} items`,
+              code: 'MAX_ITEMS',
+            })
+          }
+        }
+
+        // Enum validation
+        if (validation.enum && !validation.enum.includes(String(value))) {
+          errors.push({
+            field: variable.name,
+            message: `Variable '${variable.name}' must be one of: ${validation.enum.join(', ')}`,
+            code: 'INVALID_ENUM',
+          })
+        }
+      }
+    }
+
+    // Check user input
+    if (!context.userInput?.description || context.userInput.description.trim().length === 0) {
+      errors.push({
+        field: 'userInput.description',
+        message: 'User description is required',
+        code: 'REQUIRED',
+      })
+    }
+
+    if (!context.userInput?.features || context.userInput.features.length === 0) {
+      warnings.push({
+        field: 'userInput.features',
+        message: 'No features provided - generation may be generic',
+      })
+    }
+
+    return {
+      valid: errors.length === 0,
+      errors,
+      warnings,
+    }
+  }
+
+  /**
+   * Compile template with context
+   */
+  compile(templateId: string, context: TemplateContext): CompiledPrompt {
+    const template = this.templates.get(templateId)
+    const metadata = this.metadata.get(templateId)
+
+    if (!template || !metadata) {
+      throw new Error(`Template '${templateId}' not found`)
+    }
+
+    // Validate context
+    const validation = this.validateContext(templateId, context)
+    if (!validation.valid) {
+      throw new Error(
+        `Template validation failed:\n${validation.errors.map((e) => `- ${e.field}: ${e.message}`).join('\n')}`
+      )
+    }
+
+    // Merge with defaults
+    const variables = { ...this.getDefaults(metadata), ...context.variables }
+    const techStack = context.techStack || metadata.defaultTechStack || {}
+
+    // Prepare rendering context
+    const renderContext = {
+      ...variables,
+      techStack,
+      userInput: context.userInput,
+      helpers: {
+        hasBackend: !!techStack.backend,
+        hasFrontend: !!techStack.frontend,
+        hasDatabase: !!techStack.backend?.database,
+      },
+    }
+
+    // Render template
+    const content = template(renderContext)
+
+    // Extract sections (assumes template has section markers)
+    const sections = this.extractSections(content)
+
+    // Count tokens
+    const tokens = countTokens(content)
+
+    return {
+      content,
+      metadata: {
+        templateId,
+        variables,
+        techStack,
+        compiledAt: new Date(),
+      },
+      tokens,
+      sections,
+    }
+  }
+
+  /**
+   * Get default values for variables
+   */
+  private getDefaults(metadata: TemplateMetadata): Record<string, unknown> {
+    const defaults: Record<string, unknown> = {}
+
+    for (const variable of metadata.variables) {
+      if (variable.default !== undefined) {
+        defaults[variable.name] = variable.default
+      }
+    }
+
+    return defaults
+  }
+
+  /**
+   * Extract sections from compiled prompt
+   */
+  private extractSections(content: string): CompiledPrompt['sections'] {
+    const sections = {
+      system: '',
+      context: '',
+      requirements: '',
+      constraints: '',
+      output: '',
+    }
+
+    // Simple section extraction using markers
+    const systemMatch = content.match(/# SYSTEM\n([\s\S]*?)(?=\n# |$)/)
+    const contextMatch = content.match(/# CONTEXT\n([\s\S]*?)(?=\n# |$)/)
+    const requirementsMatch = content.match(/# REQUIREMENTS\n([\s\S]*?)(?=\n# |$)/)
+    const constraintsMatch = content.match(/# CONSTRAINTS\n([\s\S]*?)(?=\n# |$)/)
+    const outputMatch = content.match(/# OUTPUT\n([\s\S]*?)(?=\n# |$)/)
+
+    if (systemMatch) sections.system = systemMatch[1].trim()
+    if (contextMatch) sections.context = contextMatch[1].trim()
+    if (requirementsMatch) sections.requirements = requirementsMatch[1].trim()
+    if (constraintsMatch) sections.constraints = constraintsMatch[1].trim()
+    if (outputMatch) sections.output = outputMatch[1].trim()
+
+    return sections
+  }
+}
+
+// Global instance
+export const promptEngine = new PromptTemplateEngine()
+```
+
+**Step 3: Token Counting Utility (1 hour)**
+
+Create token counting utility for cost estimation.
+
+`apps/web/lib/ai/tokens.ts`:
+```typescript
+import { encoding_for_model, TiktokenModel } from 'tiktoken'
+
+const DEFAULT_MODEL: TiktokenModel = 'gpt-4'
+
+/**
+ * Count tokens in text
+ */
+export function countTokens(text: string, model: TiktokenModel = DEFAULT_MODEL): number {
+  try {
+    const encoding = encoding_for_model(model)
+    const tokens = encoding.encode(text)
+    encoding.free()
+    return tokens.length
+  } catch (error) {
+    // Fallback: rough estimate (1 token ≈ 4 characters)
+    return Math.ceil(text.length / 4)
+  }
+}
+
+/**
+ * Count tokens in messages
+ */
+export function countMessageTokens(
+  messages: Array<{ role: string; content: string }>,
+  model: TiktokenModel = DEFAULT_MODEL
+): number {
+  try {
+    const encoding = encoding_for_model(model)
+    let totalTokens = 0
+
+    for (const message of messages) {
+      // Message overhead: 4 tokens per message
+      totalTokens += 4
+
+      // Role
+      totalTokens += encoding.encode(message.role).length
+
+      // Content
+      totalTokens += encoding.encode(message.content).length
+    }
+
+    // Additional 2 tokens for assistant reply priming
+    totalTokens += 2
+
+    encoding.free()
+    return totalTokens
+  } catch (error) {
+    // Fallback
+    const totalText = messages.map((m) => m.role + m.content).join('')
+    return Math.ceil(totalText.length / 4)
+  }
+}
+
+/**
+ * Estimate cost from tokens
+ */
+export function estimateCost(
+  inputTokens: number,
+  outputTokens: number,
+  model: string
+): number {
+  const pricing: Record<string, { input: number; output: number }> = {
+    'gpt-4-turbo-preview': { input: 0.01, output: 0.03 },
+    'gpt-4': { input: 0.03, output: 0.06 },
+    'gpt-3.5-turbo': { input: 0.0005, output: 0.0015 },
+    'claude-3-5-sonnet-20241022': { input: 0.003, output: 0.015 },
+  }
+
+  const prices = pricing[model] || pricing['gpt-4-turbo-preview']
+  const inputCost = (inputTokens / 1000) * prices.input
+  const outputCost = (outputTokens / 1000) * prices.output
+
+  return inputCost + outputCost
+}
+
+/**
+ * Truncate text to fit token limit
+ */
+export function truncateToTokens(
+  text: string,
+  maxTokens: number,
+  model: TiktokenModel = DEFAULT_MODEL
+): string {
+  try {
+    const encoding = encoding_for_model(model)
+    const tokens = encoding.encode(text)
+
+    if (tokens.length <= maxTokens) {
+      encoding.free()
+      return text
+    }
+
+    const truncatedTokens = tokens.slice(0, maxTokens)
+    const decoded = new TextDecoder().decode(encoding.decode(truncatedTokens))
+    encoding.free()
+
+    return decoded + '...'
+  } catch (error) {
+    // Fallback: character-based truncation
+    const approxChars = maxTokens * 4
+    return text.slice(0, approxChars) + '...'
+  }
+}
+```
+
+**Step 4: Create Template Loader (2 hours)**
+
+Build template loader to load templates from filesystem or database.
+
+`apps/web/lib/prompts/loader.ts`:
+```typescript
+import { readdir, readFile } from 'fs/promises'
+import path from 'path'
+import matter from 'gray-matter'
+import { TemplateMetadata } from './types'
+import { promptEngine } from './engine'
+
+/**
+ * Load templates from filesystem
+ */
+export async function loadTemplatesFromFiles(templatesDir: string): Promise<void> {
+  try {
+    const files = await readdir(templatesDir)
+    const templateFiles = files.filter((f) => f.endsWith('.hbs') || f.endsWith('.txt'))
+
+    for (const file of templateFiles) {
+      const filePath = path.join(templatesDir, file)
+      const content = await readFile(filePath, 'utf-8')
+
+      // Parse frontmatter for metadata
+      const { data, content: templateContent } = matter(content)
+
+      const metadata: TemplateMetadata = {
+        id: data.id || path.basename(file, path.extname(file)),
+        name: data.name || file,
+        description: data.description || '',
+        category: data.category || 'web-app',
+        version: data.version || '1.0.0',
+        author: data.author || 'System',
+        tags: data.tags || [],
+        variables: data.variables || [],
+        defaultTechStack: data.defaultTechStack,
+      }
+
+      promptEngine.registerTemplate(metadata, templateContent)
+    }
+
+    console.log(`Loaded ${templateFiles.length} templates from ${templatesDir}`)
+  } catch (error) {
+    console.error('Failed to load templates:', error)
+    throw error
+  }
+}
+
+/**
+ * Load templates from database
+ */
+export async function loadTemplatesFromDB(prisma: any): Promise<void> {
+  try {
+    const templates = await prisma.promptTemplate.findMany({
+      where: { active: true },
+      orderBy: { version: 'desc' },
+    })
+
+    for (const template of templates) {
+      const metadata: TemplateMetadata = {
+        id: template.id,
+        name: template.name,
+        description: template.description,
+        category: template.category,
+        version: template.version,
+        author: template.author,
+        tags: template.tags,
+        variables: template.variables,
+        defaultTechStack: template.defaultTechStack,
+      }
+
+      promptEngine.registerTemplate(metadata, template.content)
+    }
+
+    console.log(`Loaded ${templates.length} templates from database`)
+  } catch (error) {
+    console.error('Failed to load templates from DB:', error)
+    throw error
+  }
+}
+
+/**
+ * Initialize template system
+ */
+export async function initializeTemplates(): Promise<void> {
+  const templatesDir = path.join(process.cwd(), 'lib', 'prompts', 'templates')
+
+  try {
+    await loadTemplatesFromFiles(templatesDir)
+  } catch (error) {
+    console.warn('Could not load templates from files, skipping:', error.message)
+  }
+}
+```
+
+**Step 5: Install Dependencies (30 minutes)**
+
+Add required packages to `apps/web/package.json`:
+```json
+{
+  "dependencies": {
+    "handlebars": "^4.7.8",
+    "tiktoken": "^1.0.10",
+    "gray-matter": "^4.0.3"
+  },
+  "devDependencies": {
+    "@types/handlebars": "^4.1.0"
+  }
+}
+```
+
+Run installation:
+```bash
+cd apps/web && pnpm install
+```
+
+**Step 6: Testing (30 minutes)**
+
+`apps/web/lib/prompts/__tests__/engine.test.ts`:
+```typescript
+import { describe, test, expect, beforeEach } from 'vitest'
+import { PromptTemplateEngine } from '../engine'
+import { TemplateMetadata, TemplateContext } from '../types'
+
+describe('PromptTemplateEngine', () => {
+  let engine: PromptTemplateEngine
+
+  beforeEach(() => {
+    engine = new PromptTemplateEngine()
+  })
+
+  test('should register and compile simple template', () => {
+    const metadata: TemplateMetadata = {
+      id: 'test-template',
+      name: 'Test Template',
+      description: 'A test template',
+      category: 'web-app',
+      version: '1.0.0',
+      author: 'Test',
+      tags: ['test'],
+      variables: [
+        {
+          name: 'appName',
+          type: 'string',
+          required: true,
+          description: 'Application name',
+        },
+      ],
+    }
+
+    const template = `# SYSTEM
+You are building an app called {{appName}}.
+
+# REQUIREMENTS
+{{userInput.description}}`
+
+    engine.registerTemplate(metadata, template)
+
+    const context: TemplateContext = {
+      variables: { appName: 'MyApp' },
+      techStack: {},
+      userInput: {
+        description: 'A todo list application',
+        features: ['add tasks', 'complete tasks'],
+      },
+    }
+
+    const result = engine.compile('test-template', context)
+
+    expect(result.content).toContain('MyApp')
+    expect(result.content).toContain('A todo list application')
+    expect(result.tokens).toBeGreaterThan(0)
+  })
+
+  test('should validate required variables', () => {
+    const metadata: TemplateMetadata = {
+      id: 'test-required',
+      name: 'Test Required',
+      description: 'Test required variables',
+      category: 'web-app',
+      version: '1.0.0',
+      author: 'Test',
+      tags: [],
+      variables: [
+        {
+          name: 'requiredVar',
+          type: 'string',
+          required: true,
+          description: 'A required variable',
+        },
+      ],
+    }
+
+    engine.registerTemplate(metadata, 'Test {{requiredVar}}')
+
+    const context: TemplateContext = {
+      variables: {},
+      techStack: {},
+      userInput: {
+        description: 'Test',
+        features: [],
+      },
+    }
+
+    expect(() => engine.compile('test-required', context)).toThrow()
+  })
+
+  test('should use default values', () => {
+    const metadata: TemplateMetadata = {
+      id: 'test-defaults',
+      name: 'Test Defaults',
+      description: 'Test default values',
+      category: 'web-app',
+      version: '1.0.0',
+      author: 'Test',
+      tags: [],
+      variables: [
+        {
+          name: 'theme',
+          type: 'string',
+          required: false,
+          default: 'light',
+          description: 'UI theme',
+        },
+      ],
+    }
+
+    engine.registerTemplate(metadata, 'Theme: {{theme}}')
+
+    const context: TemplateContext = {
+      variables: {},
+      techStack: {},
+      userInput: {
+        description: 'Test',
+        features: [],
+      },
+    }
+
+    const result = engine.compile('test-defaults', context)
+    expect(result.content).toContain('Theme: light')
+  })
+
+  test('should handle Handlebars helpers', () => {
+    const metadata: TemplateMetadata = {
+      id: 'test-helpers',
+      name: 'Test Helpers',
+      description: 'Test Handlebars helpers',
+      category: 'web-app',
+      version: '1.0.0',
+      author: 'Test',
+      tags: [],
+      variables: [],
+    }
+
+    const template = `
+Features:
+{{formatList userInput.features}}
+
+{{#if helpers.hasBackend}}
+Has backend
+{{/if}}
+`
+
+    engine.registerTemplate(metadata, template)
+
+    const context: TemplateContext = {
+      variables: {},
+      techStack: {
+        backend: {
+          framework: 'Next.js',
+          database: 'PostgreSQL',
+        },
+      },
+      userInput: {
+        description: 'Test',
+        features: ['Feature 1', 'Feature 2'],
+      },
+    }
+
+    const result = engine.compile('test-helpers', context)
+    expect(result.content).toContain('1. Feature 1')
+    expect(result.content).toContain('2. Feature 2')
+    expect(result.content).toContain('Has backend')
+  })
+
+  test('should filter templates by category', () => {
+    const templates: TemplateMetadata[] = [
+      {
+        id: 'web-1',
+        name: 'Web 1',
+        description: '',
+        category: 'web-app',
+        version: '1.0.0',
+        author: 'Test',
+        tags: ['react'],
+        variables: [],
+      },
+      {
+        id: 'mobile-1',
+        name: 'Mobile 1',
+        description: '',
+        category: 'mobile-app',
+        version: '1.0.0',
+        author: 'Test',
+        tags: ['react-native'],
+        variables: [],
+      },
+    ]
+
+    templates.forEach((metadata) => {
+      engine.registerTemplate(metadata, 'Test')
+    })
+
+    const webTemplates = engine.filterTemplates('web-app')
+    expect(webTemplates).toHaveLength(1)
+    expect(webTemplates[0].id).toBe('web-1')
+
+    const reactTemplates = engine.filterTemplates(undefined, ['react'])
+    expect(reactTemplates).toHaveLength(1)
+    expect(reactTemplates[0].id).toBe('web-1')
+  })
+})
+```
+
+**Deliverables:**
+- ✅ `lib/prompts/types.ts` - Type definitions
+- ✅ `lib/prompts/engine.ts` - Template engine with Handlebars
+- ✅ `lib/ai/tokens.ts` - Token counting utilities
+- ✅ `lib/prompts/loader.ts` - Template loader
+- ✅ `lib/prompts/__tests__/engine.test.ts` - Unit tests
+- ✅ Dependencies installed
 
 ---
 

@@ -4450,3 +4450,1362 @@ Building {{appName}}
 → Story 2.2.2: Context Extraction System (8 SP, 18 hours)
 
 ---
+### Story 2.2.2: Context Extraction System (8 SP, 18 hours)
+
+**User Story:**
+As a **system**, I want to **extract structured context from natural language input** so that **I can better understand user requirements and generate relevant code**.
+
+**Acceptance Criteria (Gherkin):**
+
+```gherkin
+Feature: Context Extraction
+
+  Scenario: Extract features from description
+    Given A user provides app description
+    When The system analyzes the text
+    Then Key features are identified
+    And Feature list is returned
+
+  Scenario: Detect technical requirements
+    Given A description mentions specific technologies
+    When The system processes the input
+    Then Technical requirements are extracted
+    And Tech stack suggestions are generated
+
+  Scenario: Identify app category
+    Given A project description
+    When Context extraction runs
+    Then App category is determined
+    And Appropriate template is suggested
+```
+
+**Story Points:** 8 SP
+**Estimated Hours:** 18 hours
+**Priority:** High
+**Dependencies:** Story 2.2.1
+
+---
+
+#### Task 2.2.2.1: Build NLP Context Analyzer (8 hours)
+
+**Implementation Steps:**
+
+**Step 1: Create Context Analyzer Types (1 hour)**
+
+`apps/web/lib/context/types.ts`:
+```typescript
+export interface UserInput {
+  description: string
+  additionalInfo?: string
+  targetAudience?: string
+  budget?: string
+  timeline?: string
+}
+
+export interface ExtractedContext {
+  appType: AppType
+  features: Feature[]
+  technicalRequirements: TechnicalRequirement[]
+  entities: Entity[]
+  userRoles: string[]
+  integrations: string[]
+  scalability: ScalabilityRequirement
+  security: SecurityRequirement
+  confidence: number
+}
+
+export type AppType =
+  | 'web-app'
+  | 'mobile-app'
+  | 'api'
+  | 'landing-page'
+  | 'dashboard'
+  | 'e-commerce'
+  | 'blog'
+  | 'portfolio'
+  | 'saas'
+  | 'marketplace'
+
+export interface Feature {
+  name: string
+  description: string
+  priority: 'must-have' | 'should-have' | 'nice-to-have'
+  category: 'authentication' | 'data-management' | 'ui' | 'integration' | 'other'
+  estimatedComplexity: 'simple' | 'medium' | 'complex'
+}
+
+export interface TechnicalRequirement {
+  type: 'database' | 'authentication' | 'payment' | 'email' | 'storage' | 'api' | 'realtime'
+  description: string
+  suggested: string[]
+}
+
+export interface Entity {
+  name: string
+  attributes: string[]
+  relationships: Array<{
+    entity: string
+    type: 'one-to-one' | 'one-to-many' | 'many-to-many'
+  }>
+}
+
+export interface ScalabilityRequirement {
+  expectedUsers: 'small' | 'medium' | 'large' | 'enterprise'
+  growthRate: 'slow' | 'moderate' | 'rapid'
+  dataVolume: 'low' | 'medium' | 'high'
+}
+
+export interface SecurityRequirement {
+  authenticationRequired: boolean
+  sensitiveData: boolean
+  complianceNeeds: string[]
+  dataPrivacy: 'basic' | 'moderate' | 'strict'
+}
+```
+
+**Step 2: Create Keyword-based Analyzer (3 hours)**
+
+`apps/web/lib/context/analyzer.ts`:
+```typescript
+import type {
+  UserInput,
+  ExtractedContext,
+  AppType,
+  Feature,
+  TechnicalRequirement,
+  Entity,
+} from './types'
+
+/**
+ * Keyword patterns for app type detection
+ */
+const APP_TYPE_PATTERNS: Record<AppType, string[]> = {
+  'e-commerce': ['shop', 'store', 'cart', 'checkout', 'product', 'inventory', 'payment'],
+  'dashboard': ['dashboard', 'admin', 'analytics', 'metrics', 'chart', 'report', 'data visualization'],
+  'landing-page': ['landing', 'marketing', 'lead', 'conversion', 'cta', 'sign up', 'waitlist'],
+  'api': ['api', 'rest', 'graphql', 'endpoint', 'webhook', 'integration'],
+  'blog': ['blog', 'post', 'article', 'cms', 'content', 'publish'],
+  'saas': ['subscription', 'tenant', 'billing', 'plan', 'tier', 'saas'],
+  'marketplace': ['marketplace', 'seller', 'buyer', 'listing', 'booking'],
+  'web-app': ['web app', 'application', 'platform', 'system'],
+  'mobile-app': ['mobile', 'ios', 'android', 'app'],
+  'portfolio': ['portfolio', 'showcase', 'gallery', 'projects'],
+}
+
+/**
+ * Feature keywords and categories
+ */
+const FEATURE_KEYWORDS: Record<string, { category: Feature['category']; priority: Feature['priority'] }> = {
+  // Authentication
+  login: { category: 'authentication', priority: 'must-have' },
+  signup: { category: 'authentication', priority: 'must-have' },
+  'sign up': { category: 'authentication', priority: 'must-have' },
+  'sign in': { category: 'authentication', priority: 'must-have' },
+  auth: { category: 'authentication', priority: 'must-have' },
+  oauth: { category: 'authentication', priority: 'should-have' },
+  '2fa': { category: 'authentication', priority: 'should-have' },
+  'two-factor': { category: 'authentication', priority: 'should-have' },
+
+  // Data Management
+  crud: { category: 'data-management', priority: 'must-have' },
+  create: { category: 'data-management', priority: 'must-have' },
+  edit: { category: 'data-management', priority: 'must-have' },
+  delete: { category: 'data-management', priority: 'must-have' },
+  search: { category: 'data-management', priority: 'should-have' },
+  filter: { category: 'data-management', priority: 'should-have' },
+  sort: { category: 'data-management', priority: 'should-have' },
+  export: { category: 'data-management', priority: 'nice-to-have' },
+  import: { category: 'data-management', priority: 'nice-to-have' },
+
+  // UI
+  responsive: { category: 'ui', priority: 'must-have' },
+  mobile: { category: 'ui', priority: 'should-have' },
+  'dark mode': { category: 'ui', priority: 'nice-to-have' },
+  animations: { category: 'ui', priority: 'nice-to-have' },
+  notifications: { category: 'ui', priority: 'should-have' },
+  toast: { category: 'ui', priority: 'nice-to-have' },
+
+  // Integration
+  payment: { category: 'integration', priority: 'must-have' },
+  stripe: { category: 'integration', priority: 'should-have' },
+  email: { category: 'integration', priority: 'should-have' },
+  sms: { category: 'integration', priority: 'nice-to-have' },
+  'third-party': { category: 'integration', priority: 'should-have' },
+}
+
+/**
+ * Technical requirement patterns
+ */
+const TECH_REQUIREMENT_PATTERNS: Record<
+  TechnicalRequirement['type'],
+  {
+    keywords: string[]
+    suggestions: string[]
+  }
+> = {
+  database: {
+    keywords: ['database', 'data', 'store', 'persist', 'save'],
+    suggestions: ['PostgreSQL', 'MySQL', 'MongoDB', 'SQLite'],
+  },
+  authentication: {
+    keywords: ['auth', 'login', 'signup', 'user', 'account'],
+    suggestions: ['NextAuth.js', 'Auth0', 'Clerk', 'Supabase Auth'],
+  },
+  payment: {
+    keywords: ['payment', 'checkout', 'billing', 'subscription', 'stripe', 'paypal'],
+    suggestions: ['Stripe', 'PayPal', 'Square'],
+  },
+  email: {
+    keywords: ['email', 'notification', 'mail', 'send'],
+    suggestions: ['Resend', 'SendGrid', 'AWS SES', 'Mailgun'],
+  },
+  storage: {
+    keywords: ['upload', 'file', 'image', 'storage', 'media'],
+    suggestions: ['AWS S3', 'Cloudinary', 'Vercel Blob', 'Uploadthing'],
+  },
+  api: {
+    keywords: ['api', 'rest', 'graphql', 'endpoint'],
+    suggestions: ['Next.js API Routes', 'tRPC', 'GraphQL', 'REST'],
+  },
+  realtime: {
+    keywords: ['realtime', 'live', 'websocket', 'push', 'chat'],
+    suggestions: ['Socket.io', 'Pusher', 'Ably', 'Supabase Realtime'],
+  },
+}
+
+/**
+ * Extract context from user input
+ */
+export function extractContext(input: UserInput): ExtractedContext {
+  const text = `${input.description} ${input.additionalInfo || ''}`.toLowerCase()
+
+  return {
+    appType: detectAppType(text),
+    features: extractFeatures(text),
+    technicalRequirements: extractTechnicalRequirements(text),
+    entities: extractEntities(text),
+    userRoles: extractUserRoles(text),
+    integrations: extractIntegrations(text),
+    scalability: extractScalabilityRequirements(input),
+    security: extractSecurityRequirements(text),
+    confidence: calculateConfidence(text),
+  }
+}
+
+/**
+ * Detect app type from text
+ */
+function detectAppType(text: string): AppType {
+  const scores: Record<AppType, number> = {
+    'web-app': 0,
+    'mobile-app': 0,
+    'api': 0,
+    'landing-page': 0,
+    'dashboard': 0,
+    'e-commerce': 0,
+    'blog': 0,
+    'portfolio': 0,
+    'saas': 0,
+    'marketplace': 0,
+  }
+
+  // Score each app type based on keyword matches
+  for (const [appType, keywords] of Object.entries(APP_TYPE_PATTERNS)) {
+    for (const keyword of keywords) {
+      if (text.includes(keyword)) {
+        scores[appType as AppType]++
+      }
+    }
+  }
+
+  // Find highest scoring type
+  let maxScore = 0
+  let detectedType: AppType = 'web-app'
+
+  for (const [appType, score] of Object.entries(scores)) {
+    if (score > maxScore) {
+      maxScore = score
+      detectedType = appType as AppType
+    }
+  }
+
+  return detectedType
+}
+
+/**
+ * Extract features from text
+ */
+function extractFeatures(text: string): Feature[] {
+  const features: Feature[] = []
+  const words = text.split(/\s+/)
+
+  for (const [keyword, config] of Object.entries(FEATURE_KEYWORDS)) {
+    if (text.includes(keyword)) {
+      features.push({
+        name: keyword,
+        description: `User wants ${keyword} functionality`,
+        priority: config.priority,
+        category: config.category,
+        estimatedComplexity: estimateComplexity(keyword),
+      })
+    }
+  }
+
+  // Extract custom features from bullet points or lists
+  const bulletRegex = /[-*•]\s*(.+)/g
+  let match
+  while ((match = bulletRegex.exec(text)) !== null) {
+    const featureText = match[1].trim()
+    if (featureText.length > 3) {
+      features.push({
+        name: featureText.substring(0, 50),
+        description: featureText,
+        priority: 'should-have',
+        category: 'other',
+        estimatedComplexity: 'medium',
+      })
+    }
+  }
+
+  return features
+}
+
+/**
+ * Extract technical requirements
+ */
+function extractTechnicalRequirements(text: string): TechnicalRequirement[] {
+  const requirements: TechnicalRequirement[] = []
+
+  for (const [type, config] of Object.entries(TECH_REQUIREMENT_PATTERNS)) {
+    const hasKeyword = config.keywords.some((kw) => text.includes(kw))
+
+    if (hasKeyword) {
+      requirements.push({
+        type: type as TechnicalRequirement['type'],
+        description: `Requires ${type} functionality`,
+        suggested: config.suggestions,
+      })
+    }
+  }
+
+  return requirements
+}
+
+/**
+ * Extract entities (data models) from text
+ */
+function extractEntities(text: string): Entity[] {
+  const entities: Entity[] = []
+
+  // Common entity patterns
+  const entityPatterns = [
+    /\b(user|customer|client|member)s?\b/gi,
+    /\b(product|item|listing)s?\b/gi,
+    /\b(order|purchase|transaction)s?\b/gi,
+    /\b(post|article|blog)s?\b/gi,
+    /\b(comment|review|rating)s?\b/gi,
+    /\b(category|tag|label)s?\b/gi,
+    /\b(payment|subscription|invoice)s?\b/gi,
+    /\b(project|task|todo)s?\b/gi,
+  ]
+
+  const found = new Set<string>()
+
+  for (const pattern of entityPatterns) {
+    let match
+    while ((match = pattern.exec(text)) !== null) {
+      const entity = match[1].toLowerCase()
+      if (!found.has(entity)) {
+        found.add(entity)
+        entities.push({
+          name: entity,
+          attributes: guessAttributes(entity),
+          relationships: guessRelationships(entity, Array.from(found)),
+        })
+      }
+    }
+  }
+
+  return entities
+}
+
+/**
+ * Guess common attributes for an entity
+ */
+function guessAttributes(entityName: string): string[] {
+  const commonAttributes: Record<string, string[]> = {
+    user: ['email', 'password', 'name', 'createdAt', 'role'],
+    product: ['name', 'description', 'price', 'stock', 'images'],
+    order: ['total', 'status', 'items', 'shippingAddress', 'createdAt'],
+    post: ['title', 'content', 'authorId', 'publishedAt', 'tags'],
+    comment: ['content', 'authorId', 'createdAt', 'postId'],
+    category: ['name', 'description', 'slug'],
+    payment: ['amount', 'status', 'method', 'transactionId', 'createdAt'],
+    project: ['name', 'description', 'status', 'startDate', 'endDate'],
+  }
+
+  return commonAttributes[entityName] || ['id', 'createdAt', 'updatedAt']
+}
+
+/**
+ * Guess relationships between entities
+ */
+function guessRelationships(
+  entityName: string,
+  allEntities: string[]
+): Entity['relationships'] {
+  const relationships: Entity['relationships'] = []
+
+  const relationshipRules: Record<string, Record<string, any>> = {
+    user: {
+      post: { type: 'one-to-many' },
+      order: { type: 'one-to-many' },
+      comment: { type: 'one-to-many' },
+    },
+    product: {
+      category: { type: 'one-to-many' },
+      order: { type: 'many-to-many' },
+    },
+    post: {
+      user: { type: 'one-to-one' },
+      comment: { type: 'one-to-many' },
+      category: { type: 'many-to-many' },
+    },
+    order: {
+      user: { type: 'one-to-one' },
+      product: { type: 'many-to-many' },
+      payment: { type: 'one-to-one' },
+    },
+  }
+
+  const rules = relationshipRules[entityName]
+  if (rules) {
+    for (const relatedEntity of allEntities) {
+      if (relatedEntity !== entityName && rules[relatedEntity]) {
+        relationships.push({
+          entity: relatedEntity,
+          type: rules[relatedEntity].type,
+        })
+      }
+    }
+  }
+
+  return relationships
+}
+
+/**
+ * Extract user roles from text
+ */
+function extractUserRoles(text: string): string[] {
+  const roles = new Set<string>()
+
+  const rolePatterns = [
+    /\b(admin|administrator)s?\b/gi,
+    /\b(user|member|customer|client)s?\b/gi,
+    /\b(moderator|editor)s?\b/gi,
+    /\b(seller|vendor|merchant)s?\b/gi,
+    /\b(buyer|shopper)s?\b/gi,
+    /\b(manager|supervisor)s?\b/gi,
+  ]
+
+  for (const pattern of rolePatterns) {
+    let match
+    while ((match = pattern.exec(text)) !== null) {
+      roles.add(match[1].toLowerCase())
+    }
+  }
+
+  return Array.from(roles)
+}
+
+/**
+ * Extract integration requirements
+ */
+function extractIntegrations(text: string): string[] {
+  const integrations = new Set<string>()
+
+  const integrationPatterns: Record<string, RegExp> = {
+    Stripe: /\b(stripe|payment)\b/gi,
+    PayPal: /\bpaypal\b/gi,
+    'Google OAuth': /\b(google|oauth|social login)\b/gi,
+    'AWS S3': /\b(s3|aws|file upload|storage)\b/gi,
+    SendGrid: /\b(sendgrid|email)\b/gi,
+    Twilio: /\b(twilio|sms)\b/gi,
+    Pusher: /\b(pusher|realtime|websocket)\b/gi,
+  }
+
+  for (const [integration, pattern] of Object.entries(integrationPatterns)) {
+    if (pattern.test(text)) {
+      integrations.add(integration)
+    }
+  }
+
+  return Array.from(integrations)
+}
+
+/**
+ * Extract scalability requirements
+ */
+function extractScalabilityRequirements(input: UserInput): ExtractedContext['scalability'] {
+  const text = `${input.description} ${input.additionalInfo || ''}`.toLowerCase()
+
+  let expectedUsers: 'small' | 'medium' | 'large' | 'enterprise' = 'small'
+  let growthRate: 'slow' | 'moderate' | 'rapid' = 'moderate'
+  let dataVolume: 'low' | 'medium' | 'high' = 'low'
+
+  // Expected users
+  if (text.match(/\b(millions?|enterprise|large scale)\b/)) {
+    expectedUsers = 'enterprise'
+    dataVolume = 'high'
+  } else if (text.match(/\b(thousands?|medium scale)\b/)) {
+    expectedUsers = 'medium'
+    dataVolume = 'medium'
+  } else if (text.match(/\b(hundreds?|small)\b/)) {
+    expectedUsers = 'small'
+  }
+
+  // Growth rate
+  if (text.match(/\b(viral|rapid|fast growth|scaling)\b/)) {
+    growthRate = 'rapid'
+  } else if (text.match(/\b(slow|steady|gradual)\b/)) {
+    growthRate = 'slow'
+  }
+
+  return {
+    expectedUsers,
+    growthRate,
+    dataVolume,
+  }
+}
+
+/**
+ * Extract security requirements
+ */
+function extractSecurityRequirements(text: string): ExtractedContext['security'] {
+  let authenticationRequired = false
+  let sensitiveData = false
+  const complianceNeeds: string[] = []
+  let dataPrivacy: 'basic' | 'moderate' | 'strict' = 'basic'
+
+  // Authentication
+  if (text.match(/\b(login|signup|auth|user account)\b/)) {
+    authenticationRequired = true
+  }
+
+  // Sensitive data
+  if (text.match(/\b(payment|credit card|health|medical|financial|personal)\b/)) {
+    sensitiveData = true
+    dataPrivacy = 'strict'
+  }
+
+  // Compliance
+  if (text.match(/\bgdpr\b/i)) complianceNeeds.push('GDPR')
+  if (text.match(/\bhipaa\b/i)) complianceNeeds.push('HIPAA')
+  if (text.match(/\bpci\b/i)) complianceNeeds.push('PCI-DSS')
+  if (text.match(/\bsoc\s*2\b/i)) complianceNeeds.push('SOC 2')
+
+  if (complianceNeeds.length > 0) {
+    dataPrivacy = 'strict'
+  }
+
+  return {
+    authenticationRequired,
+    sensitiveData,
+    complianceNeeds,
+    dataPrivacy,
+  }
+}
+
+/**
+ * Estimate feature complexity
+ */
+function estimateComplexity(featureName: string): Feature['estimatedComplexity'] {
+  const simpleFeatures = ['login', 'logout', 'search', 'filter', 'sort']
+  const complexFeatures = ['payment', 'realtime', 'analytics', 'ml', 'ai']
+
+  if (simpleFeatures.includes(featureName)) return 'simple'
+  if (complexFeatures.includes(featureName)) return 'complex'
+  return 'medium'
+}
+
+/**
+ * Calculate confidence score
+ */
+function calculateConfidence(text: string): number {
+  let score = 0
+
+  // Length of description
+  const wordCount = text.split(/\s+/).length
+  if (wordCount > 50) score += 0.3
+  else if (wordCount > 20) score += 0.2
+  else score += 0.1
+
+  // Presence of features
+  const featureCount = extractFeatures(text).length
+  if (featureCount > 5) score += 0.3
+  else if (featureCount > 2) score += 0.2
+  else score += 0.1
+
+  // Technical details
+  const techCount = extractTechnicalRequirements(text).length
+  if (techCount > 3) score += 0.2
+  else if (techCount > 1) score += 0.1
+
+  // Entities mentioned
+  const entityCount = extractEntities(text).length
+  if (entityCount > 3) score += 0.2
+  else if (entityCount > 1) score += 0.1
+
+  return Math.min(score, 1.0)
+}
+```
+
+**Step 3: Create AI-Enhanced Analyzer (3 hours)**
+
+`apps/web/lib/context/ai-analyzer.ts`:
+```typescript
+import { generateCompletion } from '@/lib/ai/service'
+import type { UserInput, ExtractedContext } from './types'
+import { extractContext } from './analyzer'
+
+/**
+ * Use AI to enhance context extraction
+ */
+export async function aiEnhancedContextExtraction(
+  input: UserInput
+): Promise<ExtractedContext> {
+  // First, get basic extraction
+  const basicContext = extractContext(input)
+
+  // Then enhance with AI
+  const prompt = `Analyze this app description and extract structured information:
+
+Description: ${input.description}
+${input.additionalInfo ? `Additional Info: ${input.additionalInfo}` : ''}
+
+Extract the following in JSON format:
+{
+  "appType": "one of: web-app, mobile-app, api, landing-page, dashboard, e-commerce, blog, portfolio, saas, marketplace",
+  "features": [
+    {
+      "name": "feature name",
+      "description": "detailed description",
+      "priority": "must-have | should-have | nice-to-have"
+    }
+  ],
+  "entities": [
+    {
+      "name": "entity name",
+      "attributes": ["attr1", "attr2"],
+      "relationships": [{"entity": "relatedEntity", "type": "one-to-many"}]
+    }
+  ],
+  "technicalRequirements": ["requirement1", "requirement2"],
+  "userRoles": ["role1", "role2"],
+  "integrations": ["integration1", "integration2"]
+}
+
+Provide only valid JSON, no explanation.`
+
+  try {
+    const result = await generateCompletion(
+      [
+        {
+          role: 'system',
+          content:
+            'You are an expert business analyst and software architect. Extract structured requirements from descriptions.',
+        },
+        { role: 'user', content: prompt },
+      ],
+      {
+        temperature: 0.3,
+        maxTokens: 2000,
+      }
+    )
+
+    const aiContext = JSON.parse(result.content)
+
+    // Merge AI results with basic extraction
+    return mergeContexts(basicContext, aiContext)
+  } catch (error) {
+    console.warn('AI context extraction failed, using basic extraction:', error)
+    return basicContext
+  }
+}
+
+/**
+ * Merge basic and AI-extracted contexts
+ */
+function mergeContexts(
+  basic: ExtractedContext,
+  ai: Partial<ExtractedContext>
+): ExtractedContext {
+  return {
+    appType: ai.appType || basic.appType,
+    features: [...basic.features, ...(ai.features || [])].filter(
+      (feature, index, self) => index === self.findIndex((f) => f.name === feature.name)
+    ),
+    technicalRequirements: [
+      ...basic.technicalRequirements,
+      ...(ai.technicalRequirements || []),
+    ],
+    entities: [...basic.entities, ...(ai.entities || [])].filter(
+      (entity, index, self) => index === self.findIndex((e) => e.name === entity.name)
+    ),
+    userRoles: Array.from(new Set([...basic.userRoles, ...(ai.userRoles || [])])),
+    integrations: Array.from(new Set([...basic.integrations, ...(ai.integrations || [])])),
+    scalability: basic.scalability,
+    security: basic.security,
+    confidence: Math.max(basic.confidence, 0.8), // AI boost confidence
+  }
+}
+```
+
+**Step 4: Create API Route (1 hour)**
+
+`apps/web/app/api/context/extract/route.ts`:
+```typescript
+import { apiHandler } from '@/lib/api/handler'
+import { z } from 'zod'
+import { aiEnhancedContextExtraction } from '@/lib/context/ai-analyzer'
+import { extractContext } from '@/lib/context/analyzer'
+
+const extractSchema = z.object({
+  description: z.string().min(10),
+  additionalInfo: z.string().optional(),
+  targetAudience: z.string().optional(),
+  budget: z.string().optional(),
+  timeline: z.string().optional(),
+  useAI: z.boolean().optional().default(true),
+})
+
+export const POST = apiHandler(
+  async (req, { body }) => {
+    const useAI = body!.useAI !== false
+
+    const context = useAI
+      ? await aiEnhancedContextExtraction(body!)
+      : extractContext(body!)
+
+    return {
+      context,
+      message: useAI
+        ? 'Context extracted using AI enhancement'
+        : 'Context extracted using keyword analysis',
+    }
+  },
+  {
+    requireAuth: true,
+    bodySchema: extractSchema,
+    rateLimit: 'generation',
+  }
+)
+```
+
+**Deliverables:**
+- ✅ `lib/context/types.ts` - Context types
+- ✅ `lib/context/analyzer.ts` - Keyword-based analyzer
+- ✅ `lib/context/ai-analyzer.ts` - AI-enhanced analyzer
+- ✅ `app/api/context/extract/route.ts` - Context extraction API
+- ✅ Feature extraction from natural language
+- ✅ Entity detection and relationship inference
+- ✅ Technical requirement identification
+- ✅ Security and scalability analysis
+
+---
+
+#### Task 2.2.2.2: Create Context Refinement UI (6 hours)
+
+**Implementation Steps:**
+
+**Step 1: Create Context Review Component (3 hours)**
+
+`apps/web/components/context/context-review.tsx`:
+```typescript
+'use client'
+
+import { useState } from 'react'
+import type { ExtractedContext, Feature } from '@/lib/context/types'
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+
+interface ContextReviewProps {
+  context: ExtractedContext
+  onUpdate: (context: ExtractedContext) => void
+  onConfirm: () => void
+}
+
+export function ContextReview({ context, onUpdate, onConfirm }: ContextReviewProps) {
+  const [editedContext, setEditedContext] = useState(context)
+
+  const updateFeature = (index: number, updates: Partial<Feature>) => {
+    const newFeatures = [...editedContext.features]
+    newFeatures[index] = { ...newFeatures[index], ...updates }
+    setEditedContext({ ...editedContext, features: newFeatures })
+    onUpdate({ ...editedContext, features: newFeatures })
+  }
+
+  const removeFeature = (index: number) => {
+    const newFeatures = editedContext.features.filter((_, i) => i !== index)
+    setEditedContext({ ...editedContext, features: newFeatures })
+    onUpdate({ ...editedContext, features: newFeatures })
+  }
+
+  const addFeature = () => {
+    const newFeature: Feature = {
+      name: 'New Feature',
+      description: '',
+      priority: 'should-have',
+      category: 'other',
+      estimatedComplexity: 'medium',
+    }
+    const newFeatures = [...editedContext.features, newFeature]
+    setEditedContext({ ...editedContext, features: newFeatures })
+    onUpdate({ ...editedContext, features: newFeatures })
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* App Type */}
+      <Card>
+        <CardHeader>
+          <CardTitle>App Type</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Badge variant="secondary" className="text-lg">
+            {editedContext.appType}
+          </Badge>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Confidence: {(editedContext.confidence * 100).toFixed(0)}%
+          </p>
+        </CardContent>
+      </Card>
+
+      {/* Features */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle>Features ({editedContext.features.length})</CardTitle>
+          <Button onClick={addFeature} size="sm">
+            Add Feature
+          </Button>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {editedContext.features.map((feature, index) => (
+              <div key={index} className="border rounded-lg p-4">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1 space-y-2">
+                    <Input
+                      value={feature.name}
+                      onChange={(e) =>
+                        updateFeature(index, { name: e.target.value })
+                      }
+                      className="font-medium"
+                    />
+                    <Input
+                      value={feature.description}
+                      onChange={(e) =>
+                        updateFeature(index, { description: e.target.value })
+                      }
+                      placeholder="Description"
+                    />
+                    <div className="flex gap-2">
+                      <Badge variant="outline">{feature.priority}</Badge>
+                      <Badge variant="outline">{feature.category}</Badge>
+                      <Badge variant="outline">{feature.estimatedComplexity}</Badge>
+                    </div>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => removeFeature(index)}
+                  >
+                    Remove
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Entities */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Data Entities ({editedContext.entities.length})</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 md:grid-cols-2">
+            {editedContext.entities.map((entity, index) => (
+              <div key={index} className="border rounded-lg p-4">
+                <h4 className="font-medium capitalize">{entity.name}</h4>
+                <div className="mt-2 space-y-1">
+                  <p className="text-sm text-muted-foreground">Attributes:</p>
+                  <div className="flex flex-wrap gap-1">
+                    {entity.attributes.map((attr, i) => (
+                      <Badge key={i} variant="secondary" className="text-xs">
+                        {attr}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Technical Requirements */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Technical Requirements</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {editedContext.technicalRequirements.map((req, index) => (
+              <div key={index} className="border-l-4 border-blue-500 pl-4">
+                <p className="font-medium capitalize">{req.type}</p>
+                <p className="text-sm text-muted-foreground">{req.description}</p>
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {req.suggested.map((suggestion, i) => (
+                    <Badge key={i} variant="outline">
+                      {suggestion}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Confirm Button */}
+      <div className="flex justify-end">
+        <Button onClick={onConfirm} size="lg">
+          Confirm & Continue
+        </Button>
+      </div>
+    </div>
+  )
+}
+```
+
+**Step 2: Create Context Hook (2 hours)**
+
+`apps/web/hooks/use-context-extraction.ts`:
+```typescript
+'use client'
+
+import { useState, useCallback } from 'react'
+import { api } from '@/lib/api-client'
+import type { UserInput, ExtractedContext } from '@/lib/context/types'
+
+export function useContextExtraction() {
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<Error | null>(null)
+  const [context, setContext] = useState<ExtractedContext | null>(null)
+
+  const extractContext = useCallback(async (input: UserInput, useAI = true) => {
+    setLoading(true)
+    setError(null)
+
+    try {
+      const result = await api.post<{ context: ExtractedContext }>('/api/context/extract', {
+        ...input,
+        useAI,
+      })
+
+      setContext(result.context)
+      return result.context
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err))
+      setError(error)
+      throw error
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  const updateContext = useCallback((newContext: ExtractedContext) => {
+    setContext(newContext)
+  }, [])
+
+  return {
+    extractContext,
+    updateContext,
+    context,
+    loading,
+    error,
+  }
+}
+```
+
+**Step 3: Create Test Suite (1 hour)**
+
+`apps/web/__tests__/context/analyzer.test.ts`:
+```typescript
+import { describe, test, expect } from 'vitest'
+import { extractContext } from '@/lib/context/analyzer'
+import type { UserInput } from '@/lib/context/types'
+
+describe('Context Analyzer', () => {
+  test('should detect e-commerce app type', () => {
+    const input: UserInput = {
+      description:
+        'An online store where users can browse products, add to cart, and checkout with Stripe.',
+    }
+
+    const context = extractContext(input)
+
+    expect(context.appType).toBe('e-commerce')
+    expect(context.features).toContainEqual(
+      expect.objectContaining({
+        name: 'cart',
+      })
+    )
+    expect(context.technicalRequirements).toContainEqual(
+      expect.objectContaining({
+        type: 'payment',
+      })
+    )
+  })
+
+  test('should extract user entities', () => {
+    const input: UserInput = {
+      description: 'Users can create posts and comment on other users posts.',
+    }
+
+    const context = extractContext(input)
+
+    expect(context.entities).toContainEqual(
+      expect.objectContaining({
+        name: 'user',
+      })
+    )
+    expect(context.entities).toContainEqual(
+      expect.objectContaining({
+        name: 'post',
+      })
+    )
+    expect(context.entities).toContainEqual(
+      expect.objectContaining({
+        name: 'comment',
+      })
+    )
+  })
+
+  test('should detect authentication requirement', () => {
+    const input: UserInput = {
+      description: 'Users need to login to access their dashboard.',
+    }
+
+    const context = extractContext(input)
+
+    expect(context.security.authenticationRequired).toBe(true)
+    expect(context.technicalRequirements).toContainEqual(
+      expect.objectContaining({
+        type: 'authentication',
+      })
+    )
+  })
+
+  test('should calculate confidence score', () => {
+    const input: UserInput = {
+      description: `
+        Build a comprehensive e-commerce platform where:
+        - Users can browse products
+        - Add items to cart
+        - Checkout with Stripe
+        - View order history
+        - Track shipments
+        - Leave reviews
+        - Get email notifications
+      `,
+    }
+
+    const context = extractContext(input)
+
+    expect(context.confidence).toBeGreaterThan(0.5)
+  })
+})
+```
+
+**Deliverables:**
+- ✅ `components/context/context-review.tsx` - Context review UI
+- ✅ `hooks/use-context-extraction.ts` - Context extraction hook
+- ✅ `__tests__/context/analyzer.test.ts` - Test suite
+- ✅ Feature editing and refinement
+- ✅ Entity visualization
+- ✅ Technical requirement display
+
+---
+
+#### Task 2.2.2.3: Integration with Template System (4 hours)
+
+**Implementation Steps:**
+
+**Step 1: Create Context-to-Template Mapper (2 hours)**
+
+`apps/web/lib/context/template-mapper.ts`:
+```typescript
+import type { ExtractedContext, AppType } from './types'
+import type { TemplateContext, TechStack } from '@/lib/prompts/types'
+
+/**
+ * Map extracted context to template context
+ */
+export function mapContextToTemplate(
+  context: ExtractedContext,
+  customTechStack?: Partial<TechStack>
+): TemplateContext {
+  return {
+    variables: extractTemplateVariables(context),
+    techStack: customTechStack || inferTechStack(context),
+    userInput: {
+      description: '', // Will be filled from user input
+      features: context.features.map((f) => f.name),
+      preferences: {
+        scalability: context.scalability,
+        security: context.security,
+      },
+    },
+  }
+}
+
+/**
+ * Extract template variables from context
+ */
+function extractTemplateVariables(context: ExtractedContext): Record<string, unknown> {
+  const variables: Record<string, unknown> = {}
+
+  // Common variables
+  variables.appName = '' // User will provide
+  variables.authRequired = context.security.authenticationRequired
+
+  // App-type specific variables
+  switch (context.appType) {
+    case 'e-commerce':
+      variables.storeName = ''
+      variables.paymentProvider = context.integrations.includes('Stripe')
+        ? 'stripe'
+        : context.integrations.includes('PayPal')
+          ? 'paypal'
+          : 'stripe'
+      variables.shippingRequired = true
+      variables.inventory = true
+      break
+
+    case 'api':
+      variables.apiName = ''
+      variables.authType = context.security.authenticationRequired ? 'jwt' : 'none'
+      variables.resources = context.entities.map((e) => e.name)
+      break
+
+    case 'dashboard':
+      variables.dashboardName = ''
+      variables.dataEntities = context.entities.map((e) => e.name)
+      variables.charts = ['line', 'bar', 'pie']
+      break
+
+    case 'landing-page':
+      variables.productName = ''
+      variables.cta = 'Get Started'
+      variables.sections = ['hero', 'features', 'pricing', 'testimonials', 'cta', 'footer']
+      break
+  }
+
+  return variables
+}
+
+/**
+ * Infer tech stack from context
+ */
+function inferTechStack(context: ExtractedContext): TechStack {
+  const techStack: TechStack = {
+    frontend: {
+      framework: 'Next.js 14',
+      styling: 'Tailwind CSS',
+    },
+    backend: {
+      framework: 'Next.js API Routes',
+      database: inferDatabase(context),
+      orm: 'Prisma',
+    },
+    deployment: {
+      platform: 'Vercel',
+    },
+  }
+
+  // Adjust based on requirements
+  const hasRealtime = context.technicalRequirements.some((r) => r.type === 'realtime')
+  if (hasRealtime) {
+    techStack.frontend!.stateManagement = 'Zustand'
+  }
+
+  const hasComplexState = context.features.length > 10
+  if (hasComplexState) {
+    techStack.frontend!.stateManagement = 'Redux Toolkit'
+  }
+
+  return techStack
+}
+
+/**
+ * Infer database type
+ */
+function inferDatabase(context: ExtractedContext): string {
+  // Check if NoSQL is better suited
+  const hasFlexibleSchema = context.entities.some(
+    (e) => e.attributes.includes('metadata') || e.attributes.includes('json')
+  )
+
+  const hasHighScalability = context.scalability.expectedUsers === 'enterprise'
+
+  if (hasFlexibleSchema) {
+    return 'MongoDB'
+  }
+
+  if (hasHighScalability && context.scalability.dataVolume === 'high') {
+    return 'PostgreSQL' // Better for large-scale OLTP
+  }
+
+  return 'PostgreSQL' // Default
+}
+```
+
+**Step 2: Create End-to-End Flow (2 hours)**
+
+`apps/web/app/generate/page.tsx`:
+```typescript
+'use client'
+
+import { useState } from 'react'
+import { useContextExtraction } from '@/hooks/use-context-extraction'
+import { useTemplates } from '@/hooks/use-templates'
+import { ContextReview } from '@/components/context/context-review'
+import { mapContextToTemplate } from '@/lib/context/template-mapper'
+import { Textarea } from '@/components/ui/textarea'
+import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
+
+export default function GeneratePage() {
+  const [description, setDescription] = useState('')
+  const [step, setStep] = useState<'input' | 'review' | 'generate'>('input')
+
+  const { extractContext, context, updateContext, loading } = useContextExtraction()
+  const { compileTemplate } = useTemplates()
+
+  const handleExtract = async () => {
+    await extractContext({ description })
+    setStep('review')
+  }
+
+  const handleConfirm = async () => {
+    if (!context) return
+
+    setStep('generate')
+
+    // Map context to template
+    const templateContext = mapContextToTemplate(context)
+    templateContext.userInput.description = description
+
+    // Get template ID based on app type
+    const templateId = context.appType
+
+    // Compile template
+    const result = await compileTemplate(templateId, templateContext)
+
+    console.log('Generated prompt:', result)
+    // Next: Send to AI for code generation
+  }
+
+  return (
+    <div className="container max-w-4xl py-8">
+      <h1 className="text-4xl font-bold mb-8">Generate Your App</h1>
+
+      {step === 'input' && (
+        <Card className="p-6">
+          <label className="block mb-2 font-medium">
+            Describe your application:
+          </label>
+          <Textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="Example: I want to build an e-commerce store where users can browse products, add to cart, and checkout with Stripe..."
+            rows={8}
+            className="mb-4"
+          />
+          <Button onClick={handleExtract} disabled={loading || description.length < 10}>
+            {loading ? 'Analyzing...' : 'Continue'}
+          </Button>
+        </Card>
+      )}
+
+      {step === 'review' && context && (
+        <ContextReview
+          context={context}
+          onUpdate={updateContext}
+          onConfirm={handleConfirm}
+        />
+      )}
+
+      {step === 'generate' && (
+        <Card className="p-6">
+          <p className="text-lg">Generating your application...</p>
+        </Card>
+      )}
+    </div>
+  )
+}
+```
+
+**Deliverables:**
+- ✅ `lib/context/template-mapper.ts` - Context to template mapping
+- ✅ `app/generate/page.tsx` - End-to-end generation flow
+- ✅ Integration between context extraction and templates
+- ✅ Tech stack inference from requirements
+- ✅ Template variable population
+
+---
+
+### **Story 2.2.2 Summary**
+
+**Completed Tasks:**
+1. ✅ Task 2.2.2.1: Build NLP Context Analyzer (8 hours)
+2. ✅ Task 2.2.2.2: Create Context Refinement UI (6 hours)
+3. ✅ Task 2.2.2.3: Integration with Template System (4 hours)
+
+**Total Time:** 18 hours
+**Story Points:** 8 SP
+
+**Files Created/Modified:**
+- `lib/context/types.ts` - Context types and interfaces
+- `lib/context/analyzer.ts` - Keyword-based context analyzer
+- `lib/context/ai-analyzer.ts` - AI-enhanced analyzer
+- `lib/context/template-mapper.ts` - Context to template mapper
+- `app/api/context/extract/route.ts` - Context extraction API
+- `components/context/context-review.tsx` - Context review UI
+- `hooks/use-context-extraction.ts` - Context extraction hook
+- `app/generate/page.tsx` - Generation flow page
+- `__tests__/context/analyzer.test.ts` - Test suite
+
+**Acceptance Criteria Met:**
+- ✅ Extract features from natural language description
+- ✅ Detect technical requirements and dependencies
+- ✅ Identify app category automatically
+- ✅ Suggest appropriate templates
+- ✅ Extract data entities and relationships
+- ✅ Determine security and scalability needs
+- ✅ Provide confidence scores
+- ✅ Allow user refinement of extracted context
+
+**Sprint 2 Progress:** 38/85 SP complete (44.7%)
+
+**Next Story:**
+→ Story 2.2.3: Tech Stack Recommender (7 SP, 16 hours)
+
+---

@@ -1,0 +1,69 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Testing
+coverage/
+.nyc_output/
+*.lcov
+
+# Next.js
+.next/
+out/
+build/
+dist/
+
+# Production
+*.log
+logs/
+*.pid
+*.seed
+*.pid.lock
+
+# Environment
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Prisma
+prisma/migrations/**/migration.sql
+
+# Docker
+*.dockerignore
+docker-compose.override.yml
+
+# Generated files
+generated/
+temp/
+tmp/
+
+# Build artifacts
+*.tgz
+.terraform/
+*.tfstate
+*.tfstate.backup
+
+# Secrets
+*.pem
+*.key
+secrets/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Misc
+.vercel
+.turbo
+*.tsbuildinfo

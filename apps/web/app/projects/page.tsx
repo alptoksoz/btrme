@@ -3,8 +3,8 @@ import { redirect } from 'next/navigation'
 import { prisma } from '@/lib/prisma'
 import Link from 'next/link'
 import { Button } from '@btrme/ui'
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@btrme/ui'
-import { Badge } from '@btrme/ui'
+import { Sparkles, Plus } from 'lucide-react'
+import { ProjectsList } from './projects-list'
 
 export default async function ProjectsPage() {
   const session = await auth()
@@ -23,54 +23,33 @@ export default async function ProjectsPage() {
   })
 
   return (
-    <div className="container mx-auto p-6">
-      <div className="mb-8 flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">My Projects</h1>
-          <p className="text-muted-foreground">Manage your AI-generated projects</p>
-        </div>
-        <Link href="/generate">
-          <Button size="lg">New Project</Button>
-        </Link>
-      </div>
-
-      {projects.length === 0 ? (
-        <Card className="p-12 text-center">
-          <CardHeader>
-            <CardTitle>No projects yet</CardTitle>
-            <CardDescription>Create your first AI-generated project</CardDescription>
-          </CardHeader>
-          <CardContent>
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950">
+      <div className="container mx-auto p-6">
+        <div className="mb-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold">My Projects</h1>
+            <p className="text-muted-foreground mt-1">
+              Manage and organize your AI-generated projects
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Link href="/studio">
+              <Button size="lg">
+                <Sparkles className="mr-2 h-4 w-4" />
+                AI Studio
+              </Button>
+            </Link>
             <Link href="/generate">
-              <Button size="lg">Generate Your First Project</Button>
+              <Button size="lg" variant="outline">
+                <Plus className="mr-2 h-4 w-4" />
+                New Project
+              </Button>
             </Link>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {projects.map((project) => (
-            <Link key={project.id} href={`/projects/${project.id}`}>
-              <Card className="h-full transition-shadow hover:shadow-lg">
-                <CardHeader>
-                  <CardTitle>{project.name}</CardTitle>
-                  <CardDescription className="line-clamp-2">
-                    {project.description || 'No description'}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Badge variant="secondary">
-                      {project._count.generations} generation{project._count.generations !== 1 ? 's' : ''}
-                    </Badge>
-                    <span>•</span>
-                    <span>{new Date(project.updatedAt).toLocaleDateString()}</span>
-                  </div>
-                </CardContent>
-              </Card>
-            </Link>
-          ))}
+          </div>
         </div>
-      )}
+
+        <ProjectsList projects={projects} />
+      </div>
     </div>
   )
 }

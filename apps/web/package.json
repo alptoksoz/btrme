@@ -39,7 +39,8 @@
     "date-fns": "^3.6.0",
     "openai": "^4.28.4",
     "@anthropic-ai/sdk": "^0.17.1",
-    "tailwindcss-animate": "^1.0.7"
+    "tailwindcss-animate": "^1.0.7",
+    "@upstash/redis": "^1.28.4"
   },
   "devDependencies": {
     "@types/node": "^20.11.24",

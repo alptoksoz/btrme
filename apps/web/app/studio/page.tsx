@@ -40,6 +40,20 @@ const SyntaxHighlighter = dynamic(
 )
 import { vscDarkPlus, vs } from 'react-syntax-highlighter/dist/esm/styles/prism'
 
+// Dynamically import react-live for live preview (client-side only)
+const LiveProvider = dynamic(
+  () => import('react-live').then((mod) => mod.LiveProvider),
+  { ssr: false }
+)
+const LivePreview = dynamic(
+  () => import('react-live').then((mod) => mod.LivePreview),
+  { ssr: false }
+)
+const LiveError = dynamic(
+  () => import('react-live').then((mod) => mod.LiveError),
+  { ssr: false }
+)
+
 const AI_MODELS = [
   {
     value: 'GPT4_TURBO',
@@ -467,14 +481,25 @@ export default function StudioPage() {
                   </TabsContent>
 
                   <TabsContent value="preview" className="mt-4">
-                    <div className="h-[500px] flex items-center justify-center bg-white dark:bg-gray-950 rounded-lg border">
-                      <div className="text-center space-y-2">
-                        <Eye className="h-12 w-12 mx-auto text-muted-foreground opacity-50" />
-                        <p className="text-sm text-muted-foreground">
-                          Live preview coming soon
-                        </p>
+                    {generatedCode ? (
+                      <div className="h-[500px] bg-white dark:bg-gray-950 rounded-lg border overflow-auto">
+                        <LiveProvider code={generatedCode} scope={{ useState }}>
+                          <div className="p-4">
+                            <LivePreview />
+                          </div>
+                          <LiveError className="mt-2 p-4 bg-red-50 dark:bg-red-950/20 text-red-600 dark:text-red-400 text-sm rounded" />
+                        </LiveProvider>
                       </div>
-                    </div>
+                    ) : (
+                      <div className="h-[500px] flex items-center justify-center bg-white dark:bg-gray-950 rounded-lg border">
+                        <div className="text-center space-y-2">
+                          <Eye className="h-12 w-12 mx-auto text-muted-foreground opacity-50" />
+                          <p className="text-sm text-muted-foreground">
+                            Generate code to see live preview
+                          </p>
+                        </div>
+                      </div>
+                    )}
                   </TabsContent>
                 </Tabs>
 

@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import dynamic from 'next/dynamic'
 import {
   Button,
   Card,
@@ -29,7 +30,15 @@ import {
   Rocket,
   ChevronDown,
   Loader2,
+  Check,
 } from 'lucide-react'
+
+// Dynamically import Prism for syntax highlighting (client-side only)
+const SyntaxHighlighter = dynamic(
+  () => import('react-syntax-highlighter').then((mod) => mod.Prism),
+  { ssr: false }
+)
+import { vscDarkPlus, vs } from 'react-syntax-highlighter/dist/esm/styles/prism'
 
 const AI_MODELS = [
   {
@@ -92,6 +101,8 @@ export default function StudioPage() {
   const [generatedCode, setGeneratedCode] = useState('')
   const [generationStats, setGenerationStats] = useState<any>(null)
   const [showSettings, setShowSettings] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const [isDarkMode, setIsDarkMode] = useState(true)
 
   const handleGenerate = async () => {
     if (!prompt.trim() || !projectName.trim()) {
@@ -146,10 +157,11 @@ export default function StudioPage() {
     }
   }
 
-  const copyToClipboard = () => {
+  const copyToClipboard = async () => {
     if (generatedCode) {
-      navigator.clipboard.writeText(generatedCode)
-      alert('Code copied to clipboard!')
+      await navigator.clipboard.writeText(generatedCode)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
     }
   }
 
@@ -365,15 +377,32 @@ export default function StudioPage() {
                       <Button
                         onClick={copyToClipboard}
                         size="sm"
-                        variant="outline"
+                        variant={copied ? 'default' : 'outline'}
                         className="h-8"
                       >
-                        <Copy className="h-3 w-3 mr-1" />
-                        Copy
+                        {copied ? (
+                          <>
+                            <Check className="h-3 w-3 mr-1" />
+                            Copied!
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="h-3 w-3 mr-1" />
+                            Copy
+                          </>
+                        )}
                       </Button>
                       <Button onClick={downloadCode} size="sm" variant="outline" className="h-8">
                         <Download className="h-3 w-3 mr-1" />
                         Download
+                      </Button>
+                      <Button
+                        onClick={() => setIsDarkMode(!isDarkMode)}
+                        size="sm"
+                        variant="outline"
+                        className="h-8"
+                      >
+                        {isDarkMode ? '☀️' : '🌙'}
                       </Button>
                     </div>
                   )}
@@ -404,9 +433,26 @@ export default function StudioPage() {
                       </div>
                     ) : generatedCode ? (
                       <div className="relative">
-                        <pre className="h-[500px] overflow-auto bg-gray-50 dark:bg-gray-900 rounded-lg p-4 text-xs font-mono">
-                          <code>{generatedCode}</code>
-                        </pre>
+                        <SyntaxHighlighter
+                          language="typescript"
+                          style={isDarkMode ? vscDarkPlus : vs}
+                          showLineNumbers
+                          wrapLines
+                          customStyle={{
+                            margin: 0,
+                            borderRadius: '0.5rem',
+                            fontSize: '0.75rem',
+                            maxHeight: '500px',
+                          }}
+                          lineNumberStyle={{
+                            minWidth: '3em',
+                            paddingRight: '1em',
+                            color: isDarkMode ? '#858585' : '#999',
+                            userSelect: 'none',
+                          }}
+                        >
+                          {generatedCode}
+                        </SyntaxHighlighter>
                       </div>
                     ) : (
                       <div className="h-[500px] flex items-center justify-center bg-gray-50 dark:bg-gray-900 rounded-lg border-2 border-dashed border-border">

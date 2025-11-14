@@ -35,12 +35,15 @@ export default async function DashboardPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Generate</CardTitle>
-            <CardDescription>Create new project from prompt</CardDescription>
+            <CardTitle>AI Studio</CardTitle>
+            <CardDescription>Create with advanced AI generation</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-2">
+            <Link href="/studio">
+              <Button className="w-full">✨ Open AI Studio</Button>
+            </Link>
             <Link href="/generate">
-              <Button className="w-full">New Generation</Button>
+              <Button className="w-full" variant="outline">Quick Generate</Button>
             </Link>
           </CardContent>
         </Card>

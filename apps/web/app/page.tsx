@@ -25,14 +25,14 @@ export default function HomePage() {
             Ship faster, iterate smarter, and build without limits.
           </p>
           <div className="flex gap-4 mt-8">
-            <Link href="/auth/signup">
+            <Link href="/studio">
               <Button size="lg" className="font-semibold">
-                Get Started Free
+                ✨ Try AI Studio
               </Button>
             </Link>
-            <Link href="/#features">
+            <Link href="/auth/signup">
               <Button size="lg" variant="outline" className="font-semibold">
-                Learn More
+                Get Started Free
               </Button>
             </Link>
           </div>

@@ -125,3 +125,21 @@ enum GenerationStatus {
   COMPLETED
   FAILED
 }
+
+model Template {
+  id          String   @id @default(cuid())
+  name        String
+  description String
+  code        String   @db.Text
+  category    String
+  tags        String[]
+  usageCount  Int      @default(0) @map("usage_count")
+  published   Boolean  @default(false)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([category])
+  @@index([published])
+  @@index([usageCount])
+  @@map("templates")
+}

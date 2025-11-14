@@ -1,5 +1,6 @@
 import { auth } from '@/auth'
 import { redirect } from 'next/navigation'
+import Link from 'next/link'
 import { Button } from '@btrme/ui'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@btrme/ui'
 
@@ -26,7 +27,9 @@ export default async function DashboardPage() {
             <CardDescription>Manage your AI-generated projects</CardDescription>
           </CardHeader>
           <CardContent>
-            <Button className="w-full">View Projects</Button>
+            <Link href="/projects">
+              <Button className="w-full">View Projects</Button>
+            </Link>
           </CardContent>
         </Card>
 
@@ -36,7 +39,9 @@ export default async function DashboardPage() {
             <CardDescription>Create new project from prompt</CardDescription>
           </CardHeader>
           <CardContent>
-            <Button className="w-full">New Generation</Button>
+            <Link href="/generate">
+              <Button className="w-full">New Generation</Button>
+            </Link>
           </CardContent>
         </Card>
 
@@ -46,9 +51,11 @@ export default async function DashboardPage() {
             <CardDescription>Browse template marketplace</CardDescription>
           </CardHeader>
           <CardContent>
-            <Button className="w-full" variant="outline">
-              Explore Templates
-            </Button>
+            <Link href="/templates">
+              <Button className="w-full" variant="outline">
+                Explore Templates
+              </Button>
+            </Link>
           </CardContent>
         </Card>
       </div>

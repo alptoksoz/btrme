@@ -14,21 +14,16 @@ export async function GET(
       return NextResponse.json(cached)
     }
 
-    const template = await prisma.$queryRaw`
-      SELECT * FROM templates WHERE id = ${params.id}
-    `
+    const template = await prisma.template.findUnique({
+      where: { id: params.id },
+    })
 
-    if (!template || (template as any[]).length === 0) {
+    if (!template) {
       return NextResponse.json({ error: 'Template not found' }, { status: 404 })
     }
 
-    // Increment usage count
-    await prisma.$executeRaw`
-      UPDATE templates SET usage_count = usage_count + 1 WHERE id = ${params.id}
-    `
-
-    await redis.set(cacheKey, (template as any[])[0], 3600) // 1 hour
-    return NextResponse.json((template as any[])[0])
+    await redis.set(cacheKey, template, 3600) // 1 hour
+    return NextResponse.json(template)
   } catch (error) {
     console.error('Get template error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

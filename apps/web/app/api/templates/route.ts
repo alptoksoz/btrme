@@ -25,15 +25,20 @@ export async function GET(request: NextRequest) {
       ]
     }
 
-    const templates = await prisma.$queryRaw`
-      SELECT id, name, description, category, tags, usage_count as "usageCount",
-             published, created_at as "createdAt"
-      FROM templates
-      WHERE published = true
-      ${category ? `AND category = ${category}` : ''}
-      ORDER BY usage_count DESC, created_at DESC
-      LIMIT 50
-    `
+    const templates = await prisma.template.findMany({
+      where,
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        category: true,
+        tags: true,
+        usageCount: true,
+        createdAt: true,
+      },
+      orderBy: [{ usageCount: 'desc' }, { createdAt: 'desc' }],
+      take: 50,
+    })
 
     await redis.set(cacheKey, templates, 300) // 5 min cache
     return NextResponse.json(templates)

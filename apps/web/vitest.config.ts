@@ -8,6 +8,7 @@ export default defineConfig({
     globals: true,
     environment: 'jsdom',
     setupFiles: ['./__tests__/setup.ts'],
+    exclude: ['**/*.spec.ts', '**/*.e2e.ts', '**/node_modules/**'], // Exclude Playwright E2E tests
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html', 'lcov'],
@@ -22,6 +23,22 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './'),
+      '@btrme/ui': path.resolve(__dirname, '../../packages/ui'),
+    },
+  },
+  esbuild: {
+    // Skip tsconfig resolution to avoid errors
+    tsconfigRaw: {
+      compilerOptions: {
+        jsx: 'react-jsx',
+        target: 'esnext',
+        module: 'esnext',
+        moduleResolution: 'bundler',
+        paths: {
+          '@/*': ['./*'],
+          '@btrme/ui': ['../../packages/ui'],
+        },
+      },
     },
   },
 })
